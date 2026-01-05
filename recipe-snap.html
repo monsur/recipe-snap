@@ -571,7 +571,7 @@
                         </div>
                     </div>
 
-                    <button class="btn-primary">
+                    <button class="btn-primary" onclick="saveSettings()">
                         <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
@@ -700,6 +700,21 @@ Extract ALL ingredients with exact quantities. Return ONLY valid JSON.`
         function toggleStep(stepId) {
             const step = document.getElementById(stepId);
             step.classList.toggle('collapsed');
+        }
+
+        function saveSettings() {
+            // Get values from form fields
+            const apiKey = document.getElementById('apiKey').value;
+            const model = document.getElementById('model').value;
+            const prompt = document.getElementById('prompt').value;
+
+            // Save to localStorage
+            localStorage.setItem('geminiApiKey', apiKey);
+            localStorage.setItem('model', model);
+            localStorage.setItem('prompt', prompt);
+
+            // Optional: Provide user feedback
+            alert('Settings saved successfully!');
         }
 
         function clearAllData(event) {
