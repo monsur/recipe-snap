@@ -10,6 +10,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
+    <!-- HEIC image conversion library -->
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+
     <style>
         :root {
             /* Clean, minimal palette */
@@ -368,6 +371,7 @@
         }
 
         .preview-item {
+            position: relative;
             aspect-ratio: 1;
             background: var(--bg);
             border-radius: 8px;
@@ -378,6 +382,55 @@
             color: var(--text-light);
             font-size: 1.5rem;
             font-weight: 500;
+            overflow: hidden;
+        }
+
+        .preview-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .preview-item-delete {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 24px;
+            height: 24px;
+            background: rgba(220, 38, 38, 0.9);
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s ease;
+            padding: 0;
+        }
+
+        .preview-item-delete:hover {
+            background: rgba(185, 28, 28, 1);
+        }
+
+        .preview-item-delete svg {
+            width: 14px;
+            height: 14px;
+            stroke: white;
+            stroke-width: 2.5;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(37, 99, 235, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
 
         /* Download section placeholder */
@@ -601,7 +654,7 @@
                             <span>Take Photo</span>
                         </button>
 
-                        <button class="upload-option-btn" type="button">
+                        <button class="upload-option-btn" type="button" onclick="document.getElementById('fileInput').click();">
                             <svg class="upload-option-icon" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                                 <polyline points="17 8 12 3 7 8"></polyline>
@@ -611,10 +664,16 @@
                         </button>
                     </div>
 
+                    <!-- Hidden file input for image uploads -->
+                    <input type="file"
+                           id="fileInput"
+                           accept="image/*"
+                           multiple
+                           style="display: none;"
+                           onchange="handleFileUpload(event)">
+
                     <div class="preview-grid" id="previewGrid" style="display: none;">
-                        <div class="preview-item">1</div>
-                        <div class="preview-item">2</div>
-                        <div class="preview-item">3</div>
+                        <!-- Preview items will be dynamically inserted here -->
                     </div>
 
                     <button class="btn-primary">
@@ -672,6 +731,9 @@
     </div>
 
     <script>
+        // Global state for uploaded images
+        window.uploadedImages = [];
+
         // Configuration - Single source of truth for default values
         const CONFIG = {
             defaults: {
@@ -691,6 +753,272 @@
 Extract ALL ingredients with exact quantities. Return ONLY valid JSON.`
             }
         };
+
+        /**
+         * Validates file type by extension
+         * @param {File} file - File object to validate
+         * @returns {boolean} - True if valid image type
+         */
+        function validateFileType(file) {
+            const validExtensions = ['jpg', 'jpeg', 'png', 'heic'];
+            const fileName = file.name.toLowerCase();
+            const extension = fileName.split('.').pop();
+
+            if (!validExtensions.includes(extension)) {
+                console.log(`Invalid file type: ${fileName}. Supported: JPG, PNG, HEIC`);
+                return false;
+            }
+
+            return true;
+        }
+
+        /**
+         * Converts HEIC images to JPEG format
+         * @param {File} file - HEIC file to convert
+         * @returns {Promise<Blob>} - Converted JPEG blob
+         */
+        async function convertHeicToJpeg(file) {
+            try {
+                // heic2any returns a Blob
+                const convertedBlob = await heic2any({
+                    blob: file,
+                    toType: 'image/jpeg',
+                    quality: 0.9
+                });
+
+                // Handle array response (multiple images in HEIC)
+                const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+
+                console.log(`Converted HEIC file: ${file.name}`);
+                return blob;
+            } catch (error) {
+                console.log(`HEIC conversion failed for ${file.name}:`, error.message);
+                throw error;
+            }
+        }
+
+        /**
+         * Resizes image to maximum 1600px on longest side while maintaining aspect ratio
+         * @param {Blob|File} imageBlob - Image to resize
+         * @returns {Promise<Blob>} - Resized image blob
+         */
+        function resizeImage(imageBlob) {
+            return new Promise((resolve, reject) => {
+                const maxSize = 1600;
+
+                // Create image element to get dimensions
+                const img = new Image();
+                const objectUrl = URL.createObjectURL(imageBlob);
+
+                img.onload = function() {
+                    // Calculate new dimensions
+                    let width = img.width;
+                    let height = img.height;
+
+                    // Only resize if image exceeds max size
+                    if (width <= maxSize && height <= maxSize) {
+                        URL.revokeObjectURL(objectUrl);
+                        resolve(imageBlob);
+                        return;
+                    }
+
+                    // Calculate scaling factor
+                    const scale = Math.min(maxSize / width, maxSize / height);
+                    width = Math.floor(width * scale);
+                    height = Math.floor(height * scale);
+
+                    // Create canvas and resize
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // Convert canvas to blob
+                    canvas.toBlob(
+                        (blob) => {
+                            URL.revokeObjectURL(objectUrl);
+                            if (blob) {
+                                console.log(`Resized image to ${width}x${height}`);
+                                resolve(blob);
+                            } else {
+                                reject(new Error('Failed to create blob from canvas'));
+                            }
+                        },
+                        'image/jpeg',
+                        0.92
+                    );
+                };
+
+                img.onerror = function() {
+                    URL.revokeObjectURL(objectUrl);
+                    reject(new Error('Failed to load image for resizing'));
+                };
+
+                img.src = objectUrl;
+            });
+        }
+
+        /**
+         * Converts image blob to base64 data URL
+         * @param {Blob} blob - Image blob to convert
+         * @returns {Promise<string>} - Base64 data URL
+         */
+        function imageToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+
+                reader.onloadend = function() {
+                    resolve(reader.result);
+                };
+
+                reader.onerror = function() {
+                    reject(new Error('Failed to read image as base64'));
+                };
+
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        /**
+         * Processes a single image: validates, converts if needed, resizes, and converts to base64
+         * @param {File} file - Image file to process
+         * @returns {Promise<string>} - Base64 data URL
+         */
+        async function processImage(file) {
+            try {
+                // Validate file type
+                if (!validateFileType(file)) {
+                    throw new Error(`Invalid file type: ${file.name}`);
+                }
+
+                // Convert HEIC to JPEG if needed
+                let imageBlob = file;
+                const isHeic = file.name.toLowerCase().endsWith('.heic');
+                if (isHeic) {
+                    imageBlob = await convertHeicToJpeg(file);
+                }
+
+                // Resize image
+                const resizedBlob = await resizeImage(imageBlob);
+
+                // Convert to base64
+                const base64 = await imageToBase64(resizedBlob);
+
+                return base64;
+            } catch (error) {
+                console.log(`Error processing image ${file.name}:`, error.message);
+                throw error;
+            }
+        }
+
+        /**
+         * Updates the preview grid with current uploaded images
+         */
+        function updatePreviewGrid() {
+            const previewGrid = document.getElementById('previewGrid');
+
+            if (!window.uploadedImages || window.uploadedImages.length === 0) {
+                previewGrid.style.display = 'none';
+                return;
+            }
+
+            // Show grid and clear existing content
+            previewGrid.style.display = 'grid';
+            previewGrid.innerHTML = '';
+
+            // Create preview items
+            window.uploadedImages.forEach((imageData, index) => {
+                const previewItem = document.createElement('div');
+                previewItem.className = 'preview-item';
+
+                // Create image element
+                const img = document.createElement('img');
+                img.src = imageData;
+                img.alt = `Uploaded image ${index + 1}`;
+
+                // Create delete button
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'preview-item-delete';
+                deleteBtn.setAttribute('aria-label', `Remove image ${index + 1}`);
+                deleteBtn.onclick = () => removeImage(index);
+
+                // Add X icon to delete button
+                deleteBtn.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                `;
+
+                previewItem.appendChild(img);
+                previewItem.appendChild(deleteBtn);
+                previewGrid.appendChild(previewItem);
+            });
+        }
+
+        /**
+         * Removes an image from the uploaded images array and updates preview
+         * @param {number} index - Index of image to remove
+         */
+        function removeImage(index) {
+            if (index >= 0 && index < window.uploadedImages.length) {
+                window.uploadedImages.splice(index, 1);
+                updatePreviewGrid();
+                console.log(`Removed image at index ${index}. ${window.uploadedImages.length} images remaining.`);
+            }
+        }
+
+        /**
+         * Main handler for file upload events
+         * @param {Event} event - Change event from file input
+         */
+        async function handleFileUpload(event) {
+            const files = Array.from(event.target.files);
+
+            if (files.length === 0) {
+                return;
+            }
+
+            console.log(`Processing ${files.length} file(s)...`);
+
+            // Show loading state
+            const uploadBtn = document.querySelector('.upload-option-btn');
+            const originalContent = uploadBtn.innerHTML;
+            uploadBtn.innerHTML = `
+                <span class="loading-spinner"></span>
+                <span>Processing ${files.length} image(s)...</span>
+            `;
+            uploadBtn.disabled = true;
+
+            // Process all files
+            const processedImages = [];
+            for (const file of files) {
+                try {
+                    const base64 = await processImage(file);
+                    processedImages.push(base64);
+                    console.log(`Successfully processed: ${file.name}`);
+                } catch (error) {
+                    console.log(`Skipping ${file.name}: ${error.message}`);
+                }
+            }
+
+            // Add processed images to global array
+            window.uploadedImages.push(...processedImages);
+
+            // Update preview
+            updatePreviewGrid();
+
+            // Restore button state
+            uploadBtn.innerHTML = originalContent;
+            uploadBtn.disabled = false;
+
+            // Reset file input so same files can be selected again
+            event.target.value = '';
+
+            console.log(`Upload complete. Total images: ${window.uploadedImages.length}`);
+        }
 
         function toggleAdvanced() {
             const advancedOptions = document.getElementById('advancedOptions');
@@ -733,8 +1061,9 @@ Extract ALL ingredients with exact quantities. Return ONLY valid JSON.`
                 document.getElementById('model').value = CONFIG.defaults.model;
                 document.getElementById('prompt').value = CONFIG.defaults.prompt;
 
-                // Clear any temporary uploads (this would be implemented when adding functionality)
-                // clearUploadedImages();
+                // Clear uploaded images
+                window.uploadedImages = [];
+                updatePreviewGrid();
 
                 console.log('All data has been cleared and reset to defaults.');
             }

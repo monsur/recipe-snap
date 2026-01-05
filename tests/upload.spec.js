@@ -71,15 +71,14 @@ test.describe('Step 2: Upload - Image Handling', () => {
     expect(typeof hasImagesArray).toBe('boolean');
   });
 
-  test('should have preview items structure for future uploads', async ({ page }) => {
+  test('should have preview grid container for future uploads', async ({ page }) => {
     // Expand step 2
     await page.locator('#step2 .step-header').click();
 
-    // This test verifies the preview-item structure exists in the DOM
-    // even though it's hidden by default
-    const previewItems = page.locator('.preview-item');
-    const count = await previewItems.count();
-    expect(count).toBeGreaterThan(0);
+    // This test verifies the preview grid container exists in the DOM
+    // Preview items will be dynamically created when images are uploaded
+    const previewGrid = page.locator('#previewGrid');
+    await expect(previewGrid).toBeAttached();
   });
 
   test('should handle HEIC file conversion', async ({ page }) => {
