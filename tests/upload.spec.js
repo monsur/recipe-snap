@@ -8,6 +8,9 @@ test.describe('Step 2: Upload - Image Handling', () => {
   });
 
   test('should have upload buttons visible', async ({ page }) => {
+    // Expand step 2
+    await page.locator('#step2 .step-header').click();
+
     const takePhotoBtn = page.locator('.upload-option-btn').filter({ hasText: 'Take Photo' });
     const uploadPhotosBtn = page.locator('.upload-option-btn').filter({ hasText: 'Upload Photos' });
 
@@ -16,11 +19,17 @@ test.describe('Step 2: Upload - Image Handling', () => {
   });
 
   test('should have extract recipe button', async ({ page }) => {
+    // Expand step 2
+    await page.locator('#step2 .step-header').click();
+
     const extractBtn = page.locator('#step2 .btn-primary').filter({ hasText: 'Extract Recipe' });
     await expect(extractBtn).toBeVisible();
   });
 
   test('should accept image file uploads', async ({ page }) => {
+    // Expand step 2
+    await page.locator('#step2 .step-header').click();
+
     // Create a test image file
     const fileInput = page.locator('input[type="file"]');
 
@@ -60,6 +69,9 @@ test.describe('Step 2: Upload - Image Handling', () => {
   });
 
   test('should have preview items structure for future uploads', async ({ page }) => {
+    // Expand step 2
+    await page.locator('#step2 .step-header').click();
+
     // This test verifies the preview-item structure exists in the DOM
     // even though it's hidden by default
     const previewItems = page.locator('.preview-item');
