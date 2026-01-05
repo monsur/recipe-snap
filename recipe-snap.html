@@ -738,9 +738,25 @@ Extract ALL ingredients with exact quantities. Return ONLY valid JSON.`
 
         // Initialize form with defaults or saved values on page load
         function initializeForm() {
+            // Load saved values
             document.getElementById('apiKey').value = localStorage.getItem('geminiApiKey') || CONFIG.defaults.apiKey;
             document.getElementById('model').value = localStorage.getItem('model') || CONFIG.defaults.model;
             document.getElementById('prompt').value = localStorage.getItem('prompt') || CONFIG.defaults.prompt;
+
+            // Smart step expansion based on saved API key
+            const hasApiKey = !!localStorage.getItem('geminiApiKey');
+
+            if (hasApiKey) {
+                // User has API key - expand step 2 (Upload), collapse steps 1 and 3
+                document.getElementById('step1').classList.add('collapsed');
+                document.getElementById('step2').classList.remove('collapsed');
+                document.getElementById('step3').classList.add('collapsed');
+            } else {
+                // No API key - expand step 1 (Setup), collapse steps 2 and 3
+                document.getElementById('step1').classList.remove('collapsed');
+                document.getElementById('step2').classList.add('collapsed');
+                document.getElementById('step3').classList.add('collapsed');
+            }
         }
 
         // Run initialization when page loads

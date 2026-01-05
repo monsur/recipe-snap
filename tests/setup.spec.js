@@ -65,6 +65,9 @@ test.describe('Step 1: Setup - API Key Management', () => {
     // Reload page
     await page.reload();
 
+    // When API key is saved, step 1 will be collapsed, so we need to expand it first
+    await page.locator('#step1 .step-header').click();
+
     // Verify API key input is populated
     const apiKeyValue = await page.locator('#apiKey').inputValue();
     expect(apiKeyValue).toBe(testApiKey);
@@ -149,10 +152,10 @@ Extract ALL ingredients with exact quantities. Return ONLY valid JSON.`;
     }));
   });
 
-  test('should collapse and expand steps', async ({ page }) => {
+  test('should collapse and expand steps when clicked', async ({ page }) => {
     const step1 = page.locator('#step1');
 
-    // Initially expanded
+    // Without API key, step 1 is initially expanded
     await expect(step1).not.toHaveClass(/collapsed/);
 
     // Click header to collapse
@@ -162,5 +165,40 @@ Extract ALL ingredients with exact quantities. Return ONLY valid JSON.`;
     // Click header to expand
     await page.locator('#step1 .step-header').click();
     await expect(step1).not.toHaveClass(/collapsed/);
+  });
+
+  test('should expand step 1 and collapse steps 2 and 3 when no API key is saved', async ({ page }) => {
+    // No API key in localStorage (already cleared in beforeEach)
+
+    // Reload to trigger initialization
+    await page.reload();
+
+    // Step 1 should be expanded
+    const step1 = page.locator('#step1');
+    await expect(step1).not.toHaveClass(/collapsed/);
+
+    // Steps 2 and 3 should be collapsed
+    const step2 = page.locator('#step2');
+    const step3 = page.locator('#step3');
+    await expect(step2).toHaveClass(/collapsed/);
+    await expect(step3).toHaveClass(/collapsed/);
+  });
+
+  test('should expand step 2 and collapse steps 1 and 3 when API key is saved', async ({ page }) => {
+    // Set API key in localStorage
+    await page.evaluate(() => localStorage.setItem('geminiApiKey', 'test-api-key'));
+
+    // Reload to trigger initialization
+    await page.reload();
+
+    // Step 2 should be expanded
+    const step2 = page.locator('#step2');
+    await expect(step2).not.toHaveClass(/collapsed/);
+
+    // Steps 1 and 3 should be collapsed
+    const step1 = page.locator('#step1');
+    const step3 = page.locator('#step3');
+    await expect(step1).toHaveClass(/collapsed/);
+    await expect(step3).toHaveClass(/collapsed/);
   });
 });
