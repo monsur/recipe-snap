@@ -95,6 +95,30 @@ test.describe('Step 1: Setup - API Key Management', () => {
     expect(storedPrompt).toBe(customPrompt);
   });
 
+  test('should save all values (API key, model, and prompt) together in localStorage', async ({ page }) => {
+    const testApiKey = 'test-api-key-comprehensive';
+    const testModel = 'gemini-2.0-flash';
+    const testPrompt = 'Custom comprehensive prompt for testing';
+
+    // Fill all fields
+    await page.locator('#apiKey').fill(testApiKey);
+    await page.locator('.advanced-toggle').click();
+    await page.locator('#model').fill(testModel);
+    await page.locator('#prompt').fill(testPrompt);
+
+    // Click save button
+    await page.locator('#step1 .btn-primary').click();
+
+    // Verify all values are stored in localStorage
+    const storedApiKey = await page.evaluate(() => localStorage.getItem('geminiApiKey'));
+    const storedModel = await page.evaluate(() => localStorage.getItem('model'));
+    const storedPrompt = await page.evaluate(() => localStorage.getItem('prompt'));
+
+    expect(storedApiKey).toBe(testApiKey);
+    expect(storedModel).toBe(testModel);
+    expect(storedPrompt).toBe(testPrompt);
+  });
+
   test('should clear all data when clear data link is clicked', async ({ page }) => {
     // Set some data
     await page.locator('#apiKey').fill('test-key');
