@@ -664,7 +664,7 @@
                             <span>Take Photo</span>
                         </button>
 
-                        <button class="upload-option-btn" type="button" onclick="document.getElementById('fileInput').click();">
+                        <button class="upload-option-btn" id="uploadBtn" type="button" onclick="document.getElementById('fileInput').click();">
                             <svg class="upload-option-icon" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                                 <polyline points="17 8 12 3 7 8"></polyline>
@@ -1001,7 +1001,7 @@ Extract ALL ingredients with exact quantities. Return ONLY valid JSON.`
             console.log(`Processing ${files.length} file(s)...`);
 
             // Show loading state
-            const uploadBtn = document.querySelector('.upload-option-btn');
+            const uploadBtn = document.getElementById('uploadBtn');
             const originalContent = uploadBtn.innerHTML;
             uploadBtn.innerHTML = `
                 <span class="loading-spinner"></span>

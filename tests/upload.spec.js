@@ -286,4 +286,73 @@ test.describe('Step 2: Upload - Image Handling', () => {
     const previewItems = page.locator('.preview-item');
     await expect(previewItems).toHaveCount(2);
   });
+
+  test('should show processing message in correct button during upload', async ({ page }) => {
+    // Expand step 2
+    await page.locator('#step2 .step-header').click();
+
+    const takePhotoBtn = page.locator('.upload-option-btn').filter({ hasText: 'Take Photo' });
+    const uploadPhotosBtn = page.locator('#uploadBtn');
+
+    // Verify both buttons are visible initially
+    await expect(takePhotoBtn).toBeVisible();
+    await expect(uploadPhotosBtn).toBeVisible();
+
+    // Set up a promise to track the button state during processing
+    const processingStatePromise = page.evaluate(() => {
+      return new Promise((resolve) => {
+        const uploadBtn = document.getElementById('uploadBtn');
+        const takePhotoBtn = document.querySelector('.upload-option-btn');
+
+        // Store original content
+        const originalUploadBtnContent = uploadBtn.innerHTML;
+        const originalTakePhotoBtnContent = takePhotoBtn.innerHTML;
+
+        // Set up a MutationObserver to watch for changes
+        const states = {
+          uploadBtnShowedProcessing: false,
+          takePhotoBtnShowedProcessing: false
+        };
+
+        const observer = new MutationObserver(() => {
+          if (uploadBtn.innerHTML.includes('Processing')) {
+            states.uploadBtnShowedProcessing = true;
+          }
+          if (takePhotoBtn.innerHTML.includes('Processing')) {
+            states.takePhotoBtnShowedProcessing = true;
+          }
+        });
+
+        observer.observe(uploadBtn, { childList: true, subtree: true });
+        observer.observe(takePhotoBtn, { childList: true, subtree: true });
+
+        // Wait for upload to complete, then resolve
+        const checkInterval = setInterval(() => {
+          if (window.uploadedImages && window.uploadedImages.length > 0) {
+            clearInterval(checkInterval);
+            observer.disconnect();
+            resolve(states);
+          }
+        }, 50);
+      });
+    });
+
+    // Trigger file upload
+    const fileInput = page.locator('input[type="file"]');
+    await fileInput.setInputFiles(path.join(__dirname, 'fixtures/test-image-small.png'));
+
+    // Wait for processing to complete and get the states
+    const states = await processingStatePromise;
+
+    // Verify "Upload Photos" button showed processing message
+    expect(states.uploadBtnShowedProcessing).toBe(true);
+
+    // Verify "Take Photo" button did NOT show processing message
+    expect(states.takePhotoBtnShowedProcessing).toBe(false);
+
+    // Verify upload completed successfully
+    await page.waitForFunction(() => window.uploadedImages.length > 0, { timeout: 5000 });
+    const imageCount = await page.evaluate(() => window.uploadedImages.length);
+    expect(imageCount).toBe(1);
+  });
 });
