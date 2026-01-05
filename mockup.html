@@ -97,10 +97,28 @@
             margin: 0;
             cursor: pointer;
             user-select: none;
+            transition: all 0.2s ease;
         }
 
         .step-header:hover {
             background: linear-gradient(135deg, rgba(37, 99, 235, 0.04) 0%, rgba(37, 99, 235, 0.08) 100%);
+        }
+
+        /* Collapsed state - muted colors */
+        .step.collapsed .step-header {
+            background: linear-gradient(135deg, rgba(107, 114, 128, 0.02) 0%, rgba(107, 114, 128, 0.04) 100%);
+        }
+
+        .step.collapsed .step-header:hover {
+            background: linear-gradient(135deg, rgba(107, 114, 128, 0.04) 0%, rgba(107, 114, 128, 0.06) 100%);
+        }
+
+        .step.collapsed .step-number {
+            background: var(--text-light);
+        }
+
+        .step.collapsed h2 {
+            color: var(--text-light);
         }
 
         .step-collapse-arrow {
@@ -108,12 +126,17 @@
             height: 20px;
             stroke: var(--text-light);
             stroke-width: 2.5;
-            transition: transform 0.3s ease;
+            transition: transform 0.3s ease, stroke 0.2s ease;
             flex-shrink: 0;
+        }
+
+        .step:not(.collapsed) .step-collapse-arrow {
+            stroke: var(--primary);
         }
 
         .step.collapsed .step-collapse-arrow {
             transform: rotate(-90deg);
+            stroke: var(--text-light);
         }
 
         /* Step content area */
@@ -143,6 +166,7 @@
             font-family: var(--font);
             font-size: 1.25rem;
             font-weight: 600;
+            transition: background 0.2s ease;
         }
 
         .step h2 {
@@ -151,6 +175,7 @@
             font-weight: 600;
             color: var(--text);
             margin: 0;
+            transition: color 0.2s ease;
         }
 
         .step p {
