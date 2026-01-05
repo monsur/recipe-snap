@@ -713,6 +713,10 @@ Extract ALL ingredients with exact quantities. Return ONLY valid JSON.`
             localStorage.setItem('model', model);
             localStorage.setItem('prompt', prompt);
 
+            // Navigate to Step 2 - collapse step 1, expand step 2
+            document.getElementById('step1').classList.add('collapsed');
+            document.getElementById('step2').classList.remove('collapsed');
+
             // Optional: Provide user feedback
             alert('Settings saved successfully!');
         }

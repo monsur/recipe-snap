@@ -119,10 +119,14 @@ test.describe('Step 1: Setup - API Key Management', () => {
     expect(storedModel).toBe('custom-model');
     expect(storedPrompt).toBe('custom prompt text');
 
+    // After save, step 1 is collapsed, so we need to expand it again
+    await page.locator('#step1 .step-header').click();
+    await page.locator('.advanced-toggle').click();
+
     // Mock the confirm dialog to return true
     page.on('dialog', dialog => dialog.accept());
 
-    // Click clear data (advanced options should already be open)
+    // Click clear data (advanced options should now be open)
     await page.locator('.clear-data-link').click();
 
     // Verify localStorage is cleared
@@ -200,5 +204,21 @@ Extract ALL ingredients with exact quantities. Return ONLY valid JSON.`;
     const step3 = page.locator('#step3');
     await expect(step1).toHaveClass(/collapsed/);
     await expect(step3).toHaveClass(/collapsed/);
+  });
+
+  test('should navigate to step 2 after clicking save in step 1', async ({ page }) => {
+    // Step 1 should be initially expanded (no API key)
+    const step1 = page.locator('#step1');
+    const step2 = page.locator('#step2');
+    await expect(step1).not.toHaveClass(/collapsed/);
+    await expect(step2).toHaveClass(/collapsed/);
+
+    // Fill in API key and save
+    await page.locator('#apiKey').fill('test-navigation-key');
+    await page.locator('#step1 .btn-primary').click();
+
+    // After save, step 1 should be collapsed and step 2 should be expanded
+    await expect(step1).toHaveClass(/collapsed/);
+    await expect(step2).not.toHaveClass(/collapsed/);
   });
 });
