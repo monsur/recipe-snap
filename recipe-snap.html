@@ -551,21 +551,10 @@
                         <div class="advanced-content">
                             <div class="advanced-content-inner">
                                 <label for="model">Model</label>
-                                <input type="text" id="model" placeholder="gemini-1.5-flash" value="gemini-1.5-flash">
+                                <input type="text" id="model" placeholder="gemini-1.5-flash">
 
                                 <label for="prompt">Prompt</label>
-                                <textarea id="prompt" class="editor-placeholder prompt-editor" placeholder="Enter your custom prompt...">You are a recipe extraction expert. Analyze the provided recipe image(s) and extract the following information in JSON format:
-
-{
-  "name": "Recipe name",
-  "ingredients": "Complete list of ingredients, one per line",
-  "directions": ["Step 1", "Step 2", ...],
-  "servings": "Number of servings",
-  "prep_time": "Preparation time",
-  "cook_time": "Cooking time"
-}
-
-Extract ALL ingredients with exact quantities. Return ONLY valid JSON.</textarea>
+                                <textarea id="prompt" class="editor-placeholder prompt-editor" placeholder="Enter your custom prompt..."></textarea>
 
                                 <div class="clear-data-section">
                                     <a href="#" class="clear-data-link" onclick="clearAllData(event)">
@@ -683,6 +672,26 @@ Extract ALL ingredients with exact quantities. Return ONLY valid JSON.</textarea
     </div>
 
     <script>
+        // Configuration - Single source of truth for default values
+        const CONFIG = {
+            defaults: {
+                apiKey: '',
+                model: 'gemini-1.5-flash',
+                prompt: `You are a recipe extraction expert. Analyze the provided recipe image(s) and extract the following information in JSON format:
+
+{
+  "name": "Recipe name",
+  "ingredients": "Complete list of ingredients, one per line",
+  "directions": ["Step 1", "Step 2", ...],
+  "servings": "Number of servings",
+  "prep_time": "Preparation time",
+  "cook_time": "Cooking time"
+}
+
+Extract ALL ingredients with exact quantities. Return ONLY valid JSON.`
+            }
+        };
+
         function toggleAdvanced() {
             const advancedOptions = document.getElementById('advancedOptions');
             advancedOptions.classList.toggle('open');
@@ -701,20 +710,9 @@ Extract ALL ingredients with exact quantities. Return ONLY valid JSON.</textarea
                 localStorage.clear();
 
                 // Reset form fields to defaults
-                document.getElementById('apiKey').value = '';
-                document.getElementById('model').value = 'gemini-1.5-flash';
-                document.getElementById('prompt').value = `You are a recipe extraction expert. Analyze the provided recipe image(s) and extract the following information in JSON format:
-
-{
-  "name": "Recipe name",
-  "ingredients": "Complete list of ingredients, one per line",
-  "directions": ["Step 1", "Step 2", ...],
-  "servings": "Number of servings",
-  "prep_time": "Preparation time",
-  "cook_time": "Cooking time"
-}
-
-Extract ALL ingredients with exact quantities. Return ONLY valid JSON.`;
+                document.getElementById('apiKey').value = CONFIG.defaults.apiKey;
+                document.getElementById('model').value = CONFIG.defaults.model;
+                document.getElementById('prompt').value = CONFIG.defaults.prompt;
 
                 // Clear any temporary uploads (this would be implemented when adding functionality)
                 // clearUploadedImages();
@@ -722,6 +720,16 @@ Extract ALL ingredients with exact quantities. Return ONLY valid JSON.`;
                 alert('All data has been cleared and reset to defaults.');
             }
         }
+
+        // Initialize form with defaults or saved values on page load
+        function initializeForm() {
+            document.getElementById('apiKey').value = localStorage.getItem('geminiApiKey') || CONFIG.defaults.apiKey;
+            document.getElementById('model').value = localStorage.getItem('model') || CONFIG.defaults.model;
+            document.getElementById('prompt').value = localStorage.getItem('prompt') || CONFIG.defaults.prompt;
+        }
+
+        // Run initialization when page loads
+        document.addEventListener('DOMContentLoaded', initializeForm);
     </script>
 </body>
 </html>
