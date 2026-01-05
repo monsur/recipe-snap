@@ -38,18 +38,33 @@ test.describe('Step 1: Setup - API Key Management', () => {
     expect(storedKey).toBe(testApiKey);
   });
 
-  test('should load API key from localStorage on page load', async ({ page }) => {
+  test('should load API key, model, and prompt from localStorage on page load', async ({ page }) => {
     const testApiKey = 'persisted-api-key-67890';
+    const testModel = 'gemini-pro-persisted';
+    const testPrompt = 'Persisted custom prompt for testing';
 
-    // Set API key in localStorage
-    await page.evaluate((key) => localStorage.setItem('geminiApiKey', key), testApiKey);
+    // Set all values in localStorage
+    await page.evaluate((values) => {
+      localStorage.setItem('geminiApiKey', values.apiKey);
+      localStorage.setItem('model', values.model);
+      localStorage.setItem('prompt', values.prompt);
+    }, { apiKey: testApiKey, model: testModel, prompt: testPrompt });
 
     // Reload page
     await page.reload();
 
-    // Verify input is populated
+    // Verify API key input is populated
     const apiKeyValue = await page.locator('#apiKey').inputValue();
     expect(apiKeyValue).toBe(testApiKey);
+
+    // Verify model input is populated (need to open advanced options first)
+    await page.locator('.advanced-toggle').click();
+    const modelValue = await page.locator('#model').inputValue();
+    expect(modelValue).toBe(testModel);
+
+    // Verify prompt input is populated
+    const promptValue = await page.locator('#prompt').inputValue();
+    expect(promptValue).toBe(testPrompt);
   });
 
   test('should toggle advanced options', async ({ page }) => {
