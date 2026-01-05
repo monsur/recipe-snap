@@ -40,6 +40,9 @@ test.describe('Step 2: Upload - Image Handling', () => {
   });
 
   test('should hide preview grid when no photos are uploaded', async ({ page }) => {
+    // Expand step 2 to properly test that the preview grid is hidden
+    await page.locator('#step2 .step-header').click();
+
     const previewGrid = page.locator('#previewGrid');
     await expect(previewGrid).not.toBeVisible();
   });
