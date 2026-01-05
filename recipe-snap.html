@@ -1508,19 +1508,8 @@
         const CONFIG = {
             defaults: {
                 apiKey: '',
-                model: 'gemini-1.5-flash',
-                prompt: `You are a recipe extraction expert. Analyze the provided recipe image(s) and extract the following information in JSON format:
-
-{
-  "name": "Recipe name",
-  "ingredients": "Complete list of ingredients, one per line",
-  "directions": ["Step 1", "Step 2", ...],
-  "servings": "Number of servings",
-  "prep_time": "Preparation time",
-  "cook_time": "Cooking time"
-}
-
-Extract ALL ingredients with exact quantities. Return ONLY valid JSON.`
+                model: 'gemini-3-flash-preview',
+                prompt: `Analyze the provided image(s) and extract the the recipe into .paprikarecipe format. The images may be out of order.`
             }
         };
 
