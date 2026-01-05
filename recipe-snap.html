@@ -550,11 +550,11 @@
                         </div>
                         <div class="advanced-content">
                             <div class="advanced-content-inner">
-                                <label for="llmModel">Model</label>
-                                <input type="text" id="llmModel" placeholder="gemini-1.5-flash" value="gemini-1.5-flash">
+                                <label for="model">Model</label>
+                                <input type="text" id="model" placeholder="gemini-1.5-flash" value="gemini-1.5-flash">
 
-                                <label for="llmPrompt">Prompt</label>
-                                <textarea id="llmPrompt" class="editor-placeholder prompt-editor" placeholder="Enter your custom prompt...">You are a recipe extraction expert. Analyze the provided recipe image(s) and extract the following information in JSON format:
+                                <label for="prompt">Prompt</label>
+                                <textarea id="prompt" class="editor-placeholder prompt-editor" placeholder="Enter your custom prompt...">You are a recipe extraction expert. Analyze the provided recipe image(s) and extract the following information in JSON format:
 
 {
   "name": "Recipe name",
@@ -702,8 +702,8 @@ Extract ALL ingredients with exact quantities. Return ONLY valid JSON.</textarea
 
                 // Reset form fields to defaults
                 document.getElementById('apiKey').value = '';
-                document.getElementById('llmModel').value = 'gemini-1.5-flash';
-                document.getElementById('llmPrompt').value = `You are a recipe extraction expert. Analyze the provided recipe image(s) and extract the following information in JSON format:
+                document.getElementById('model').value = 'gemini-1.5-flash';
+                document.getElementById('prompt').value = `You are a recipe extraction expert. Analyze the provided recipe image(s) and extract the following information in JSON format:
 
 {
   "name": "Recipe name",

@@ -69,7 +69,7 @@ test.describe('Step 1: Setup - API Key Management', () => {
 
   test('should have default model value', async ({ page }) => {
     await page.locator('.advanced-toggle').click();
-    const modelInput = page.locator('#llmModel');
+    const modelInput = page.locator('#model');
     await expect(modelInput).toHaveValue('gemini-1.5-flash');
   });
 
@@ -77,10 +77,10 @@ test.describe('Step 1: Setup - API Key Management', () => {
     const customModel = 'gemini-pro';
 
     await page.locator('.advanced-toggle').click();
-    await page.locator('#llmModel').fill(customModel);
+    await page.locator('#model').fill(customModel);
     await page.locator('#step1 .btn-primary').click();
 
-    const storedModel = await page.evaluate(() => localStorage.getItem('llmModel'));
+    const storedModel = await page.evaluate(() => localStorage.getItem('model'));
     expect(storedModel).toBe(customModel);
   });
 
@@ -88,10 +88,10 @@ test.describe('Step 1: Setup - API Key Management', () => {
     const customPrompt = 'Extract recipe with special instructions';
 
     await page.locator('.advanced-toggle').click();
-    await page.locator('#llmPrompt').fill(customPrompt);
+    await page.locator('#prompt').fill(customPrompt);
     await page.locator('#step1 .btn-primary').click();
 
-    const storedPrompt = await page.evaluate(() => localStorage.getItem('llmPrompt'));
+    const storedPrompt = await page.evaluate(() => localStorage.getItem('prompt'));
     expect(storedPrompt).toBe(customPrompt);
   });
 

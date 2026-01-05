@@ -81,14 +81,14 @@ test.describe('End-to-End Integration Tests', () => {
     await page.locator('#apiKey').fill('custom-test-key');
 
     await page.locator('.advanced-toggle').click();
-    await page.locator('#llmModel').fill('gemini-pro-vision');
-    await page.locator('#llmPrompt').fill('Extract recipe with metric measurements');
+    await page.locator('#model').fill('gemini-pro-vision');
+    await page.locator('#prompt').fill('Extract recipe with metric measurements');
 
     await page.locator('#step1 .btn-primary').click();
 
     // Verify settings saved
-    const savedModel = await page.evaluate(() => localStorage.getItem('llmModel'));
-    const savedPrompt = await page.evaluate(() => localStorage.getItem('llmPrompt'));
+    const savedModel = await page.evaluate(() => localStorage.getItem('model'));
+    const savedPrompt = await page.evaluate(() => localStorage.getItem('prompt'));
 
     expect(savedModel).toBe('gemini-pro-vision');
     expect(savedPrompt).toBe('Extract recipe with metric measurements');
@@ -261,7 +261,7 @@ test.describe('End-to-End Integration Tests', () => {
     // Set up data
     await page.locator('#apiKey').fill('test-to-clear');
     await page.locator('.advanced-toggle').click();
-    await page.locator('#llmModel').fill('custom-model');
+    await page.locator('#model').fill('custom-model');
     await page.locator('#step1 .btn-primary').click();
 
     // Verify data exists

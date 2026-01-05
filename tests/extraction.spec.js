@@ -174,13 +174,13 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
     const customModel = 'gemini-pro-vision';
 
     await page.evaluate((model) => {
-      localStorage.setItem('llmModel', model);
+      localStorage.setItem('model', model);
     }, customModel);
 
     await page.reload();
 
     const storedModel = await page.evaluate(() => {
-      return localStorage.getItem('llmModel');
+      return localStorage.getItem('model');
     });
 
     expect(storedModel).toBe(customModel);
@@ -190,13 +190,13 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
     const customPrompt = 'Extract recipe in French';
 
     await page.evaluate((prompt) => {
-      localStorage.setItem('llmPrompt', prompt);
+      localStorage.setItem('prompt', prompt);
     }, customPrompt);
 
     await page.reload();
 
     const storedPrompt = await page.evaluate(() => {
-      return localStorage.getItem('llmPrompt');
+      return localStorage.getItem('prompt');
     });
 
     expect(storedPrompt).toBe(customPrompt);
