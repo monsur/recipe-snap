@@ -24,18 +24,30 @@ test.describe('Step 1: Setup - API Key Management', () => {
     await expect(apiKeyInput).toHaveAttribute('type', 'password');
   });
 
-  test('should store API key in localStorage when saved', async ({ page }) => {
+  test('should store API key, model, and prompt in localStorage when saved', async ({ page }) => {
     const testApiKey = 'test-api-key-12345';
+    const testModel = 'gemini-2.0-flash-test';
+    const testPrompt = 'Test prompt for verification';
 
     // Enter API key
     await page.locator('#apiKey').fill(testApiKey);
 
+    // Open advanced options and fill model and prompt
+    await page.locator('.advanced-toggle').click();
+    await page.locator('#model').fill(testModel);
+    await page.locator('#prompt').fill(testPrompt);
+
     // Click save button
     await page.locator('#step1 .btn-primary').click();
 
-    // Verify it's stored in localStorage
+    // Verify all values are stored in localStorage
     const storedKey = await page.evaluate(() => localStorage.getItem('geminiApiKey'));
+    const storedModel = await page.evaluate(() => localStorage.getItem('model'));
+    const storedPrompt = await page.evaluate(() => localStorage.getItem('prompt'));
+
     expect(storedKey).toBe(testApiKey);
+    expect(storedModel).toBe(testModel);
+    expect(storedPrompt).toBe(testPrompt);
   });
 
   test('should load API key, model, and prompt from localStorage on page load', async ({ page }) => {
