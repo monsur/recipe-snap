@@ -525,6 +525,269 @@
             background: var(--bg);
         }
 
+        /* Camera Modal */
+        .camera-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            animation: cameraModalFadeIn 0.2s ease;
+        }
+
+        @keyframes cameraModalFadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        .camera-modal-content {
+            width: 100%;
+            max-width: 800px;
+            background: var(--surface);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            max-height: 90vh;
+        }
+
+        /* Modal Header */
+        .camera-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg);
+        }
+
+        .camera-modal-header h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text);
+            margin: 0;
+        }
+
+        .camera-modal-close {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s ease;
+            padding: 0;
+        }
+
+        .camera-modal-close:hover {
+            background: var(--border);
+        }
+
+        .camera-modal-close svg {
+            width: 20px;
+            height: 20px;
+            stroke: var(--text);
+            stroke-width: 2;
+        }
+
+        /* Video Container */
+        .camera-video-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        #cameraVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Camera Error Display */
+        .camera-error {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+            z-index: 10;
+        }
+
+        .camera-error-icon {
+            width: 48px;
+            height: 48px;
+            stroke: #DC2626;
+            stroke-width: 2;
+        }
+
+        #cameraErrorMessage {
+            font-size: 1rem;
+            margin: 0;
+            max-width: 400px;
+            line-height: 1.5;
+        }
+
+        /* Session Thumbnails */
+        .camera-session-thumbnails {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 0.5rem;
+            padding: 1rem;
+            background: var(--bg);
+            border-top: 1px solid var(--border);
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .camera-session-thumbnail {
+            position: relative;
+            aspect-ratio: 1;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 2px solid var(--border);
+            background: var(--surface);
+        }
+
+        .camera-session-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .camera-session-thumbnail-remove {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 20px;
+            height: 20px;
+            background: rgba(220, 38, 38, 0.9);
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            transition: background 0.2s ease;
+        }
+
+        .camera-session-thumbnail-remove:hover {
+            background: rgba(185, 28, 28, 1);
+        }
+
+        .camera-session-thumbnail-remove svg {
+            width: 12px;
+            height: 12px;
+            stroke: white;
+            stroke-width: 2.5;
+        }
+
+        /* Camera Controls */
+        .camera-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            padding: 1.5rem;
+            background: var(--bg);
+            border-top: 1px solid var(--border);
+        }
+
+        .camera-control-btn {
+            border: none;
+            background: var(--surface);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            padding: 0;
+        }
+
+        .camera-switch-btn {
+            width: 48px;
+            height: 48px;
+            border: 2px solid var(--border);
+        }
+
+        .camera-switch-btn:hover {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .camera-switch-btn:hover svg {
+            stroke: white;
+        }
+
+        .camera-switch-btn svg {
+            width: 24px;
+            height: 24px;
+            stroke: var(--text);
+            stroke-width: 2;
+        }
+
+        .camera-capture-btn {
+            width: 72px;
+            height: 72px;
+            background: var(--primary);
+            border: 4px solid white;
+            box-shadow: 0 2px 8px var(--shadow);
+        }
+
+        .camera-capture-btn:hover {
+            background: var(--primary-hover);
+            transform: scale(1.05);
+        }
+
+        .camera-capture-btn:active {
+            transform: scale(0.95);
+        }
+
+        .camera-capture-btn svg {
+            width: 32px;
+            height: 32px;
+            stroke: white;
+            stroke-width: 2;
+        }
+
+        .camera-done-btn {
+            min-width: 120px;
+        }
+
+        /* Loading state for capture button */
+        .camera-capture-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         /* Button group */
         .button-group {
             display: flex;
@@ -574,6 +837,42 @@
 
             .upload-options {
                 grid-template-columns: 1fr;
+            }
+
+            /* Camera modal mobile styles */
+            .camera-modal {
+                padding: 0;
+            }
+
+            .camera-modal-content {
+                max-width: 100%;
+                max-height: 100vh;
+                border-radius: 0;
+            }
+
+            .camera-video-container {
+                aspect-ratio: 3 / 4; /* Portrait orientation for mobile */
+            }
+
+            .camera-controls {
+                padding: 1rem;
+            }
+
+            .camera-capture-btn {
+                width: 64px;
+                height: 64px;
+            }
+
+            .camera-switch-btn {
+                width: 44px;
+                height: 44px;
+            }
+        }
+
+        /* Landscape mobile */
+        @media (max-width: 768px) and (orientation: landscape) {
+            .camera-video-container {
+                aspect-ratio: 16 / 9;
             }
         }
     </style>
@@ -656,7 +955,7 @@
                     <p>Take or upload photos of your recipe. Supports JPG, PNG, and HEIC formats.</p>
 
                     <div class="upload-options">
-                        <button class="upload-option-btn" type="button">
+                        <button class="upload-option-btn" id="takePhotoBtn" type="button" onclick="openCamera()">
                             <svg class="upload-option-icon" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
                                 <circle cx="12" cy="13" r="4"></circle>
@@ -684,6 +983,72 @@
 
                     <div class="preview-grid" id="previewGrid" style="display: none;">
                         <!-- Preview items will be dynamically inserted here -->
+                    </div>
+
+                    <!-- Camera Modal -->
+                    <div id="cameraModal" class="camera-modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="cameraModalTitle">
+                        <div class="camera-modal-content">
+                            <!-- Header -->
+                            <div class="camera-modal-header">
+                                <h3 id="cameraModalTitle">Take Photo</h3>
+                                <button class="camera-modal-close" onclick="closeCamera()" aria-label="Close camera">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <!-- Video preview container -->
+                            <div class="camera-video-container">
+                                <video id="cameraVideo" autoplay playsinline></video>
+
+                                <!-- Camera error message (hidden by default) -->
+                                <div id="cameraError" class="camera-error" style="display: none;">
+                                    <svg class="camera-error-icon" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                    </svg>
+                                    <p id="cameraErrorMessage">Camera access required</p>
+                                </div>
+                            </div>
+
+                            <!-- Session thumbnails (photos taken in this session) -->
+                            <div id="cameraSessionThumbnails" class="camera-session-thumbnails" style="display: none;">
+                                <!-- Dynamically populated -->
+                            </div>
+
+                            <!-- Camera controls -->
+                            <div class="camera-controls">
+                                <!-- Toggle front/back camera (mobile only, shown conditionally) -->
+                                <button id="cameraSwitchBtn" class="camera-control-btn camera-switch-btn" onclick="toggleCamera()" aria-label="Switch camera" style="display: none;">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M17 3l4 4m0 0l-4 4m4-4H7a4 4 0 0 0-4 4v6"></path>
+                                        <path d="M7 21l-4-4m0 0l4-4m-4 4h14a4 4 0 0 0 4-4V7"></path>
+                                    </svg>
+                                </button>
+
+                                <!-- Capture button -->
+                                <button id="cameraCaptureBtn" class="camera-control-btn camera-capture-btn" onclick="capturePhoto()" aria-label="Take photo">
+                                    <svg class="camera-capture-icon" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                        <circle cx="12" cy="13" r="4"></circle>
+                                    </svg>
+                                </button>
+
+                                <!-- Done button -->
+                                <button id="cameraDoneBtn" class="btn-primary camera-done-btn" onclick="processCapturedPhotos()">
+                                    <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                    <span>Done</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Hidden canvas for capturing frames -->
+                        <canvas id="cameraCanvas" style="display: none;"></canvas>
                     </div>
 
                     <button class="btn-primary">
@@ -743,6 +1108,401 @@
     <script>
         // Global state for uploaded images
         window.uploadedImages = [];
+
+        // Global camera state
+        window.cameraState = {
+            stream: null,
+            facingMode: 'environment', // 'user' for front, 'environment' for back
+            capturedPhotos: [], // Photos captured in current session
+            hasMultipleCameras: false
+        };
+
+        /**
+         * Opens camera modal and requests camera access
+         * Handles permissions, initializes video stream, and detects multiple cameras
+         */
+        async function openCamera() {
+            const modal = document.getElementById('cameraModal');
+            const video = document.getElementById('cameraVideo');
+            const errorContainer = document.getElementById('cameraError');
+            const errorMessage = document.getElementById('cameraErrorMessage');
+            const takePhotoBtn = document.getElementById('takePhotoBtn');
+            const switchBtn = document.getElementById('cameraSwitchBtn');
+
+            // Show loading state in button
+            const originalContent = takePhotoBtn.innerHTML;
+            takePhotoBtn.innerHTML = `
+                <span class="loading-spinner"></span>
+                <span>Opening Camera...</span>
+            `;
+            takePhotoBtn.disabled = true;
+
+            try {
+                // Check if mediaDevices API is supported
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Camera access is not supported in this browser. Please use a modern browser like Chrome, Firefox, or Safari.');
+                }
+
+                // Reset captured photos for new session
+                window.cameraState.capturedPhotos = [];
+                updateSessionThumbnails();
+
+                // Show modal
+                modal.style.display = 'flex';
+                errorContainer.style.display = 'none';
+
+                // Request camera with high resolution preference
+                const constraints = {
+                    video: {
+                        facingMode: window.cameraState.facingMode,
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    },
+                    audio: false
+                };
+
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                window.cameraState.stream = stream;
+                video.srcObject = stream;
+
+                // Detect if device has multiple cameras (for camera switch button)
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                window.cameraState.hasMultipleCameras = videoDevices.length > 1;
+
+                // Show camera switch button only if multiple cameras available
+                if (window.cameraState.hasMultipleCameras) {
+                    switchBtn.style.display = 'flex';
+                }
+
+                console.log(`Camera opened successfully. Resolution: ${stream.getVideoTracks()[0].getSettings().width}x${stream.getVideoTracks()[0].getSettings().height}`);
+
+                // Restore button state
+                takePhotoBtn.innerHTML = originalContent;
+                takePhotoBtn.disabled = false;
+
+            } catch (error) {
+                console.error('Camera access error:', error);
+
+                // Restore button state
+                takePhotoBtn.innerHTML = originalContent;
+                takePhotoBtn.disabled = false;
+
+                // Show error in modal
+                modal.style.display = 'flex';
+                errorContainer.style.display = 'flex';
+
+                // Customize error message based on error type
+                if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                    errorMessage.textContent = 'Camera access was denied. Please allow camera access in your browser settings and try again.';
+                } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+                    errorMessage.textContent = 'No camera found on this device. Please ensure your camera is connected and try again.';
+                } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+                    errorMessage.textContent = 'Camera is already in use by another application. Please close other apps using the camera and try again.';
+                } else {
+                    errorMessage.textContent = error.message || 'Unable to access camera. Please check your browser settings and try again.';
+                }
+            }
+        }
+
+        /**
+         * Closes camera modal and releases camera stream
+         * Properly cleans up resources to prevent camera staying on
+         */
+        function closeCamera() {
+            const modal = document.getElementById('cameraModal');
+            const video = document.getElementById('cameraVideo');
+            const switchBtn = document.getElementById('cameraSwitchBtn');
+
+            // Stop all video tracks to release camera
+            if (window.cameraState.stream) {
+                window.cameraState.stream.getTracks().forEach(track => {
+                    track.stop();
+                });
+                window.cameraState.stream = null;
+            }
+
+            // Clear video source
+            video.srcObject = null;
+
+            // Hide modal
+            modal.style.display = 'none';
+
+            // Hide camera switch button
+            switchBtn.style.display = 'none';
+
+            // Reset facing mode to back camera
+            window.cameraState.facingMode = 'environment';
+
+            console.log('Camera closed and resources released');
+        }
+
+        /**
+         * Toggles between front and back camera (mobile)
+         * Stops current stream and requests new stream with opposite facing mode
+         */
+        async function toggleCamera() {
+            const video = document.getElementById('cameraVideo');
+            const errorContainer = document.getElementById('cameraError');
+            const switchBtn = document.getElementById('cameraSwitchBtn');
+
+            // Disable button during switch
+            const originalContent = switchBtn.innerHTML;
+            switchBtn.innerHTML = '<span class="loading-spinner"></span>';
+            switchBtn.disabled = true;
+
+            try {
+                // Stop current stream
+                if (window.cameraState.stream) {
+                    window.cameraState.stream.getTracks().forEach(track => track.stop());
+                }
+
+                // Toggle facing mode
+                window.cameraState.facingMode = window.cameraState.facingMode === 'user' ? 'environment' : 'user';
+
+                // Request new stream with toggled camera
+                const constraints = {
+                    video: {
+                        facingMode: window.cameraState.facingMode,
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    },
+                    audio: false
+                };
+
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                window.cameraState.stream = stream;
+                video.srcObject = stream;
+
+                errorContainer.style.display = 'none';
+
+                console.log(`Switched to ${window.cameraState.facingMode} camera`);
+
+            } catch (error) {
+                console.error('Camera switch error:', error);
+                errorContainer.style.display = 'flex';
+                document.getElementById('cameraErrorMessage').textContent =
+                    'Failed to switch camera. ' + (error.message || 'Please try again.');
+            } finally {
+                // Restore button
+                switchBtn.innerHTML = originalContent;
+                switchBtn.disabled = false;
+            }
+        }
+
+        /**
+         * Captures current video frame to canvas and stores as base64
+         * Adds snapshot to session thumbnails for preview
+         */
+        function capturePhoto() {
+            const video = document.getElementById('cameraVideo');
+            const canvas = document.getElementById('cameraCanvas');
+            const captureBtn = document.getElementById('cameraCaptureBtn');
+
+            // Check if video is playing
+            if (!video.srcObject || video.readyState !== video.HAVE_ENOUGH_DATA) {
+                console.error('Video not ready for capture');
+                return;
+            }
+
+            // Disable button briefly for visual feedback
+            captureBtn.disabled = true;
+
+            // Brief flash effect
+            video.style.opacity = '0.5';
+            setTimeout(() => {
+                video.style.opacity = '1';
+                captureBtn.disabled = false;
+            }, 150);
+
+            try {
+                // Set canvas dimensions to match video
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+
+                // Draw video frame to canvas
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                // Convert canvas to base64 data URL (JPEG for smaller size)
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+
+                // Add to captured photos array
+                window.cameraState.capturedPhotos.push(dataUrl);
+
+                // Update session thumbnails display
+                updateSessionThumbnails();
+
+                // Play shutter sound effect (optional)
+                playShutterSound();
+
+                console.log(`Photo captured (${canvas.width}x${canvas.height}). Total photos in session: ${window.cameraState.capturedPhotos.length}`);
+
+            } catch (error) {
+                console.error('Capture error:', error);
+                captureBtn.disabled = false;
+            }
+        }
+
+        /**
+         * Updates the thumbnail gallery in camera modal
+         * Shows photos captured in current session
+         */
+        function updateSessionThumbnails() {
+            const container = document.getElementById('cameraSessionThumbnails');
+
+            if (window.cameraState.capturedPhotos.length === 0) {
+                container.style.display = 'none';
+                container.innerHTML = '';
+                return;
+            }
+
+            container.style.display = 'grid';
+            container.innerHTML = '';
+
+            window.cameraState.capturedPhotos.forEach((photoData, index) => {
+                const thumbnail = document.createElement('div');
+                thumbnail.className = 'camera-session-thumbnail';
+
+                // Create image
+                const img = document.createElement('img');
+                img.src = photoData;
+                img.alt = `Captured photo ${index + 1}`;
+
+                // Create remove button
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'camera-session-thumbnail-remove';
+                removeBtn.setAttribute('aria-label', `Remove photo ${index + 1}`);
+                removeBtn.onclick = () => removeSessionPhoto(index);
+                removeBtn.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                `;
+
+                thumbnail.appendChild(img);
+                thumbnail.appendChild(removeBtn);
+                container.appendChild(thumbnail);
+            });
+        }
+
+        /**
+         * Removes a photo from the current camera session
+         * @param {number} index - Index of photo to remove
+         */
+        function removeSessionPhoto(index) {
+            if (index >= 0 && index < window.cameraState.capturedPhotos.length) {
+                window.cameraState.capturedPhotos.splice(index, 1);
+                updateSessionThumbnails();
+                console.log(`Removed photo at index ${index}. ${window.cameraState.capturedPhotos.length} photos remaining in session.`);
+            }
+        }
+
+        /**
+         * Processes all captured photos and adds them to main upload array
+         * Resizes images and closes camera modal
+         */
+        async function processCapturedPhotos() {
+            const doneBtn = document.getElementById('cameraDoneBtn');
+
+            // Check if any photos were captured
+            if (window.cameraState.capturedPhotos.length === 0) {
+                closeCamera();
+                return;
+            }
+
+            // Show loading state
+            const originalContent = doneBtn.innerHTML;
+            doneBtn.innerHTML = `
+                <span class="loading-spinner"></span>
+                <span>Processing ${window.cameraState.capturedPhotos.length} photo(s)...</span>
+            `;
+            doneBtn.disabled = true;
+
+            try {
+                console.log(`Processing ${window.cameraState.capturedPhotos.length} captured photo(s)...`);
+
+                // Process each captured photo
+                for (let i = 0; i < window.cameraState.capturedPhotos.length; i++) {
+                    const photoData = window.cameraState.capturedPhotos[i];
+
+                    // Convert base64 to blob for processing
+                    const response = await fetch(photoData);
+                    const blob = await response.blob();
+
+                    // Resize image using existing function
+                    const resizedBlob = await resizeImage(blob);
+
+                    // Convert back to base64
+                    const resizedBase64 = await imageToBase64(resizedBlob);
+
+                    // Add to main uploaded images array
+                    window.uploadedImages.push(resizedBase64);
+
+                    console.log(`Processed captured photo ${i + 1}/${window.cameraState.capturedPhotos.length}`);
+                }
+
+                // Update main preview grid
+                updatePreviewGrid();
+
+                // Close camera modal
+                closeCamera();
+
+                console.log(`Successfully processed ${window.cameraState.capturedPhotos.length} photos. Total images: ${window.uploadedImages.length}`);
+
+            } catch (error) {
+                console.error('Error processing captured photos:', error);
+                alert('Failed to process photos. Please try again.');
+
+                // Restore button state
+                doneBtn.innerHTML = originalContent;
+                doneBtn.disabled = false;
+            }
+        }
+
+        /**
+         * Plays a camera shutter sound effect using Web Audio API
+         * Optional enhancement for user feedback
+         */
+        function playShutterSound() {
+            try {
+                // Create audio context (if not already created)
+                if (!window.audioContext) {
+                    window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+
+                const audioContext = window.audioContext;
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+
+                // Simple shutter sound: quick high-low tone
+                oscillator.frequency.value = 800;
+                gainNode.gain.value = 0.1;
+
+                oscillator.start(audioContext.currentTime);
+
+                // Quick frequency drop
+                oscillator.frequency.exponentialRampToValueAtTime(
+                    400,
+                    audioContext.currentTime + 0.05
+                );
+
+                // Fade out
+                gainNode.gain.exponentialRampToValueAtTime(
+                    0.01,
+                    audioContext.currentTime + 0.1
+                );
+
+                oscillator.stop(audioContext.currentTime + 0.1);
+            } catch (error) {
+                // Silently fail if audio not supported
+                console.log('Shutter sound not available:', error.message);
+            }
+        }
 
         // Configuration - Single source of truth for default values
         const CONFIG = {
@@ -1123,6 +1883,16 @@ Extract ALL ingredients with exact quantities. Return ONLY valid JSON.`
 
         // Run initialization when page loads
         document.addEventListener('DOMContentLoaded', initializeForm);
+
+        // Add keyboard event listener for ESC key (close camera modal)
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape' || event.key === 'Esc') {
+                const modal = document.getElementById('cameraModal');
+                if (modal && modal.style.display !== 'none') {
+                    closeCamera();
+                }
+            }
+        });
     </script>
 </body>
 </html>
