@@ -30,9 +30,9 @@ test.describe('Step 2: Upload - Image Handling', () => {
     await expect(uploadBtn).toBeVisible();
   });
 
-  test('should show preview grid', async ({ page }) => {
-    const previewGrid = page.locator('.preview-grid');
-    await expect(previewGrid).toBeVisible();
+  test('should hide preview grid when no photos are uploaded', async ({ page }) => {
+    const previewGrid = page.locator('#previewGrid');
+    await expect(previewGrid).not.toBeVisible();
   });
 
   test('should handle file input change event', async ({ page }) => {
@@ -59,9 +59,9 @@ test.describe('Step 2: Upload - Image Handling', () => {
     expect(typeof hasImagesArray).toBe('boolean');
   });
 
-  test('should display image thumbnails after upload', async ({ page }) => {
-    // This test will verify thumbnails are created
-    // Currently testing the preview-item structure exists
+  test('should have preview items structure for future uploads', async ({ page }) => {
+    // This test verifies the preview-item structure exists in the DOM
+    // even though it's hidden by default
     const previewItems = page.locator('.preview-item');
     const count = await previewItems.count();
     expect(count).toBeGreaterThan(0);
