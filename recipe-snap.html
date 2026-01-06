@@ -1607,8 +1607,23 @@
                     throw new Error('Failed to parse recipe data from API response. Please try again.');
                 }
 
-                // 9. Add photos to recipe JSON
-                recipeJson.photos = window.uploadedImages;
+                // 9. Add photos to recipe JSON with proper schema
+                recipeJson.photos = window.uploadedImages.map((img, index) => {
+                    // Remove the "data:image/jpeg;base64," prefix
+                    const base64Data = img.split(',')[1];
+                    const name = String(index + 1);
+                    return {
+                        name: name,
+                        filename: `${name}.jpg`,
+                        data: base64Data
+                    };
+                });
+
+                // Add top-level photo_data field with first photo's data
+                if (recipeJson.photos.length > 0) {
+                    recipeJson.photo_data = recipeJson.photos[0].data;
+                }
+
                 console.log(`Added ${window.uploadedImages.length} photo(s) to recipe`);
                 window.uploadedImages.forEach((img, i) => {
                     const sizeKB = Math.round(img.length / 1024);
@@ -1676,15 +1691,19 @@
             console.log('Recipe displayed in editor');
             console.log(`Recipe has ${recipe.photos?.length || 0} photos in JSON`);
 
-            // Check if photos are truncated
+            // Check if photos are valid
             if (recipe.photos && recipe.photos.length > 0) {
-                const firstPhotoLength = recipe.photos[0].length;
-                const lastPhotoLength = recipe.photos[recipe.photos.length - 1].length;
-                console.log(`First photo length: ${firstPhotoLength}, Last photo length: ${lastPhotoLength}`);
+                const firstPhoto = recipe.photos[0];
+                const lastPhoto = recipe.photos[recipe.photos.length - 1];
 
-                // Warn if photos seem incomplete (should start with data:image/)
-                if (!recipe.photos[0].startsWith('data:image/')) {
-                    console.warn('⚠️ Photos may be corrupted - not valid data URLs');
+                // Check if photos have the expected object structure
+                if (firstPhoto.data && lastPhoto.data) {
+                    const firstPhotoLength = firstPhoto.data.length;
+                    const lastPhotoLength = lastPhoto.data.length;
+                    console.log(`First photo data length: ${firstPhotoLength}, Last photo data length: ${lastPhotoLength}`);
+                    console.log(`First photo: name="${firstPhoto.name}", filename="${firstPhoto.filename}"`);
+                } else {
+                    console.warn('⚠️ Photos may be corrupted - missing data property');
                 }
             }
         }
