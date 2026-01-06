@@ -86,6 +86,9 @@ test.describe('Step 3: Download - Recipe Export', () => {
     // Set up download listener
     const downloadPromise = page.waitForEvent('download', { timeout: 5000 }).catch(() => null);
 
+    // Expand step 3
+    await page.locator('#step3 .step-header').click();
+
     // Click download button
     const downloadBtn = page.locator('#step3 .btn-primary').filter({ hasText: /Download/ });
     await downloadBtn.click();
@@ -113,6 +116,9 @@ test.describe('Step 3: Download - Recipe Export', () => {
 
     const downloadPromise = page.waitForEvent('download', { timeout: 5000 }).catch(() => null);
 
+    // Expand step 3
+    await page.locator('#step3 .step-header').click();
+
     const downloadBtn = page.locator('#step3 .btn-primary').filter({ hasText: /Download/ });
     await downloadBtn.click();
 
@@ -139,6 +145,9 @@ test.describe('Step 3: Download - Recipe Export', () => {
     // Grant clipboard permissions
     await page.context().grantPermissions(['clipboard-write', 'clipboard-read']);
 
+    // Expand step 3
+    await page.locator('#step3 .step-header').click();
+
     const copyBtn = page.locator('#step3 .btn-secondary').filter({ hasText: 'Copy to Clipboard' });
     await copyBtn.click();
 
@@ -162,6 +171,9 @@ test.describe('Step 3: Download - Recipe Export', () => {
       alertShown = true;
       await dialog.accept();
     });
+
+    // Expand step 3
+    await page.locator('#step3 .step-header').click();
 
     const copyBtn = page.locator('#step3 .btn-secondary').filter({ hasText: 'Copy to Clipboard' });
     await copyBtn.click();
@@ -199,6 +211,9 @@ test.describe('Step 3: Download - Recipe Export', () => {
   });
 
   test('should validate JSON before download', async ({ page }) => {
+    // Expand step 3
+    await page.locator('#step3 .step-header').click();
+
     // Put invalid JSON in editor
     const editor = page.locator('#step3 textarea');
     await editor.fill('{ invalid json }');
@@ -254,6 +269,9 @@ test.describe('Step 3: Download - Recipe Export', () => {
     });
 
     const downloadPromise = page.waitForEvent('download', { timeout: 5000 }).catch(() => null);
+
+    // Expand step 3
+    await page.locator('#step3 .step-header').click();
 
     const downloadBtn = page.locator('#step3 .btn-primary').filter({ hasText: /Download/ });
     await downloadBtn.click();

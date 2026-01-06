@@ -1051,7 +1051,7 @@
                         <canvas id="cameraCanvas" style="display: none;"></canvas>
                     </div>
 
-                    <button class="btn-primary">
+                    <button class="btn-primary" id="extractBtn" onclick="extractRecipe()">
                         <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
                         </svg>
@@ -1072,7 +1072,7 @@
                 <div class="step-content">
                     <p>Review the extracted recipe and download it in Paprika format.</p>
 
-                    <div class="status">
+                    <div class="status" id="extractionStatus" style="display: none;">
                         <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                             <polyline points="22 4 12 14.01 9 11.01"></polyline>
@@ -1080,10 +1080,10 @@
                         <span>Recipe extracted successfully!</span>
                     </div>
 
-                    <textarea class="editor-placeholder" placeholder='{\n  "name": "Grandma\'s Lasagna",\n  "ingredients": "1 lb Ground Beef\\n2 cups Mozzarella...",\n  "directions": [\n    "Brown the beef...",\n    "Layer noodles..."\n  ]\n}'></textarea>
+                    <textarea class="editor-placeholder" id="recipeEditor" placeholder="Recipe JSON will appear here after extraction..."></textarea>
 
                     <div class="button-group">
-                        <button class="btn-primary">
+                        <button class="btn-primary" onclick="downloadRecipe()">
                             <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                                 <polyline points="7 10 12 15 17 10"></polyline>
@@ -1092,7 +1092,7 @@
                             Download .paprikarecipe
                         </button>
 
-                        <button class="btn-secondary">
+                        <button class="btn-secondary" onclick="copyToClipboard()">
                             <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
                                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -1116,6 +1116,9 @@
             capturedPhotos: [], // Photos captured in current session
             hasMultipleCameras: false
         };
+
+        // Global state for extracted recipe
+        window.extractedRecipe = null;
 
         /**
          * Opens camera modal and requests camera access
@@ -1512,6 +1515,278 @@
                 prompt: `Analyze the provided image(s) and extract the the recipe into .paprikarecipe format. The images may be out of order.`
             }
         };
+
+        /**
+         * Extracts recipe from uploaded images using Gemini API
+         */
+        async function extractRecipe() {
+            // 1. Get API key and validate
+            const apiKey = localStorage.getItem('geminiApiKey');
+            if (!apiKey) {
+                alert('Please enter your Gemini API key in Step 1 first.');
+                return;
+            }
+
+            // 2. Check if images are uploaded
+            if (!window.uploadedImages || window.uploadedImages.length === 0) {
+                alert('Please upload or capture at least one image first.');
+                return;
+            }
+
+            // 3. Get model and prompt (with fallbacks to CONFIG.defaults)
+            const model = localStorage.getItem('model') || CONFIG.defaults.model;
+            const prompt = localStorage.getItem('prompt') || CONFIG.defaults.prompt;
+
+            // 4. Show loading state
+            const extractBtn = document.getElementById('extractBtn');
+            const originalContent = extractBtn.innerHTML;
+            extractBtn.innerHTML = `
+                <span class="loading-spinner"></span>
+                <span>Reading recipe...</span>
+            `;
+            extractBtn.disabled = true;
+
+            try {
+                // 5. Prepare image parts for API
+                const imageParts = window.uploadedImages.map(base64Data => {
+                    // Extract base64 data (remove data:image/...;base64, prefix)
+                    const base64Content = base64Data.split(',')[1];
+                    return {
+                        inlineData: {
+                            data: base64Content,
+                            mimeType: 'image/jpeg'
+                        }
+                    };
+                });
+
+                // 6. Prepare API request body
+                const requestBody = {
+                    contents: [{
+                        parts: [
+                            { text: prompt },
+                            ...imageParts
+                        ]
+                    }]
+                };
+
+                // 7. Call Gemini API with fetch
+                console.log(`Sending ${imageParts.length} image(s) to Gemini API...`);
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error?.message || `API request failed with status ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log('Received response from API');
+
+                // Extract text from response
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!text) {
+                    throw new Error('No text content in API response');
+                }
+
+                // 8. Parse JSON from response
+                let recipeJson;
+                try {
+                    // Try to extract JSON from markdown code blocks if present
+                    const jsonMatch = text.match(/```json\n?([\s\S]*?)\n?```/) || text.match(/```\n?([\s\S]*?)\n?```/);
+                    const jsonText = jsonMatch ? jsonMatch[1] : text;
+                    recipeJson = JSON.parse(jsonText);
+                } catch (parseError) {
+                    console.error('Failed to parse JSON:', parseError);
+                    throw new Error('Failed to parse recipe data from API response. Please try again.');
+                }
+
+                // 9. Add photos to recipe JSON
+                recipeJson.photos = window.uploadedImages;
+                console.log(`Added ${window.uploadedImages.length} photo(s) to recipe`);
+                window.uploadedImages.forEach((img, i) => {
+                    const sizeKB = Math.round(img.length / 1024);
+                    console.log(`  Photo ${i + 1}: ${sizeKB} KB`);
+                });
+
+                // 10. Store in global state
+                window.extractedRecipe = recipeJson;
+
+                // 11. Display in editor
+                displayRecipeInEditor(recipeJson);
+
+                // Log total JSON size
+                const jsonSize = Math.round(JSON.stringify(recipeJson).length / 1024);
+                console.log(`Total recipe JSON size: ${jsonSize} KB`);
+
+                // 12. Show Step 3 and collapse Step 2
+                document.getElementById('step2').classList.add('collapsed');
+                document.getElementById('step3').classList.remove('collapsed');
+
+                // 13. Show success status message
+                document.getElementById('extractionStatus').style.display = 'flex';
+
+                console.log('Recipe extraction complete!');
+
+                // Restore button state
+                extractBtn.innerHTML = originalContent;
+                extractBtn.disabled = false;
+
+            } catch (error) {
+                console.error('Extraction error:', error);
+
+                // Restore button state
+                extractBtn.innerHTML = originalContent;
+                extractBtn.disabled = false;
+
+                // Show user-friendly error message
+                let errorMessage = 'Failed to extract recipe. ';
+                if (error.message && error.message.includes('API key')) {
+                    errorMessage += 'Please check your API key is valid.';
+                } else if (error.message && error.message.includes('parse')) {
+                    errorMessage += 'The API response was not in the expected format.';
+                } else if (error.message && error.message.includes('quota')) {
+                    errorMessage += 'API quota exceeded. Please try again later.';
+                } else {
+                    errorMessage += error.message || 'Please try again.';
+                }
+
+                alert(errorMessage);
+            }
+        }
+
+        /**
+         * Displays recipe JSON in the editor textarea with formatting
+         * @param {Object} recipe - Recipe object to display
+         */
+        function displayRecipeInEditor(recipe) {
+            const editor = document.getElementById('recipeEditor');
+
+            // Format JSON with 2-space indentation
+            const formattedJson = JSON.stringify(recipe, null, 2);
+
+            editor.value = formattedJson;
+
+            console.log('Recipe displayed in editor');
+            console.log(`Recipe has ${recipe.photos?.length || 0} photos in JSON`);
+
+            // Check if photos are truncated
+            if (recipe.photos && recipe.photos.length > 0) {
+                const firstPhotoLength = recipe.photos[0].length;
+                const lastPhotoLength = recipe.photos[recipe.photos.length - 1].length;
+                console.log(`First photo length: ${firstPhotoLength}, Last photo length: ${lastPhotoLength}`);
+
+                // Warn if photos seem incomplete (should start with data:image/)
+                if (!recipe.photos[0].startsWith('data:image/')) {
+                    console.warn('⚠️ Photos may be corrupted - not valid data URLs');
+                }
+            }
+        }
+
+        /**
+         * Downloads the recipe as a .paprikarecipe file
+         */
+        function downloadRecipe() {
+            const editor = document.getElementById('recipeEditor');
+            const jsonText = editor.value;
+
+            // Validate JSON
+            try {
+                JSON.parse(jsonText);
+            } catch (error) {
+                alert('Invalid JSON in editor. Please fix the errors before downloading.');
+                return;
+            }
+
+            // Parse recipe to get name for filename
+            let filename = 'recipe.paprikarecipe';
+            try {
+                const recipe = JSON.parse(jsonText);
+                if (recipe.name) {
+                    // Sanitize filename (remove special characters)
+                    const safeName = recipe.name
+                        .replace(/[<>:"/\\|?*]/g, '') // Remove invalid filename chars
+                        .replace(/&/g, 'and')
+                        .replace(/'/g, '')
+                        .replace(/\s+/g, '-') // Replace spaces with hyphens
+                        .substring(0, 50); // Limit length
+
+                    filename = `${safeName}.paprikarecipe`;
+                }
+            } catch (error) {
+                // Use default filename if parsing fails
+            }
+
+            // Create blob and download
+            const blob = new Blob([jsonText], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            console.log(`Downloaded recipe as ${filename}`);
+        }
+
+        /**
+         * Copies recipe JSON to clipboard
+         */
+        async function copyToClipboard() {
+            const editor = document.getElementById('recipeEditor');
+            const jsonText = editor.value;
+
+            try {
+                // Use modern Clipboard API
+                await navigator.clipboard.writeText(jsonText);
+
+                // Show success feedback (temporary button text change)
+                const copyBtn = document.querySelector('#step3 .btn-secondary');
+                const originalContent = copyBtn.innerHTML;
+                copyBtn.innerHTML = `
+                    <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    <span>Copied!</span>
+                `;
+
+                // Reset after 2 seconds
+                setTimeout(() => {
+                    copyBtn.innerHTML = originalContent;
+                }, 2000);
+
+                console.log('Recipe copied to clipboard');
+            } catch (error) {
+                console.error('Copy failed:', error);
+
+                // Fallback: try execCommand (older browsers)
+                try {
+                    editor.select();
+                    document.execCommand('copy');
+                    alert('Recipe copied to clipboard!');
+                } catch (fallbackError) {
+                    alert('Failed to copy to clipboard. Please copy manually.');
+                }
+            }
+        }
+
+        /**
+         * Clears the recipe editor and extracted recipe state
+         */
+        function clearEditor() {
+            const editor = document.getElementById('recipeEditor');
+            editor.value = '';
+            window.extractedRecipe = null;
+            console.log('Editor cleared');
+        }
 
         /**
          * Validates file type by extension

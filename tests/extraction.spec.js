@@ -33,8 +33,11 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
     await page.evaluate(() => localStorage.removeItem('geminiApiKey'));
     await page.reload();
 
+    // Expand step 2
+    await page.locator('#step2 .step-header').click();
+
     // Try to extract without API key
-    const extractBtn = page.locator('#step2 .btn-primary');
+    const extractBtn = page.locator('#extractBtn');
 
     // Listen for alert
     let alertMessage = '';
@@ -82,8 +85,11 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
       window.uploadedImages = ['data:image/jpeg;base64,/9j/4AAQSkZJRg=='];
     });
 
+    // Expand step 2
+    await page.locator('#step2 .step-header').click();
+
     // Click extract button
-    const extractBtn = page.locator('#step2 .btn-primary');
+    const extractBtn = page.locator('#extractBtn');
     await extractBtn.click();
 
     // Wait for processing (will need actual implementation)
@@ -123,8 +129,11 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
       window.uploadedImages = ['data:image/jpeg;base64,test'];
     });
 
+    // Expand step 2
+    await page.locator('#step2 .step-header').click();
+
     // Try to extract
-    const extractBtn = page.locator('#step2 .btn-primary');
+    const extractBtn = page.locator('#extractBtn');
     await extractBtn.click();
 
     await page.waitForTimeout(1000);
@@ -154,7 +163,10 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
       window.uploadedImages = ['data:image/jpeg;base64,test'];
     });
 
-    const extractBtn = page.locator('#step2 .btn-primary');
+    // Expand step 2
+    await page.locator('#step2 .step-header').click();
+
+    const extractBtn = page.locator('#extractBtn');
     await extractBtn.click();
 
     // Check for loading indicator
@@ -226,7 +238,10 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
       window.uploadedImages = ['data:image/jpeg;base64,testimage123'];
     });
 
-    const extractBtn = page.locator('#step2 .btn-primary');
+    // Expand step 2
+    await page.locator('#step2 .step-header').click();
+
+    const extractBtn = page.locator('#extractBtn');
     await extractBtn.click();
 
     await page.waitForTimeout(1000);
@@ -258,7 +273,10 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
       ];
     });
 
-    const extractBtn = page.locator('#step2 .btn-primary');
+    // Expand step 2
+    await page.locator('#step2 .step-header').click();
+
+    const extractBtn = page.locator('#extractBtn');
     await extractBtn.click();
 
     await page.waitForTimeout(1000);
@@ -295,7 +313,10 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
       window.uploadedImages = ['data:image/jpeg;base64,test'];
     });
 
-    const extractBtn = page.locator('#step2 .btn-primary');
+    // Expand step 2
+    await page.locator('#step2 .step-header').click();
+
+    const extractBtn = page.locator('#extractBtn');
     await extractBtn.click();
 
     await page.waitForTimeout(1000);
