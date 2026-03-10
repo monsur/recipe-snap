@@ -3,7 +3,7 @@ const path = require('path');
 
 test.describe('Step 2: Upload - Image Handling', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/recipe-snap.html');
+    await page.goto('/');
     await page.evaluate(() => {
       localStorage.clear();
       window.uploadedImages = [];

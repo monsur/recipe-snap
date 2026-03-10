@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 
 test.describe('Step 2: Extraction - Gemini API Integration', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/recipe-snap.html');
+    await page.goto('/');
     await page.evaluate(() => localStorage.clear());
 
     // Set up a test API key

@@ -1,8 +1,9 @@
 const { test, expect } = require('@playwright/test');
+const fs = require('fs');
 
 test.describe('Step 3: Download - Recipe Export', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/recipe-snap.html');
+    await page.goto('/');
     await page.evaluate(() => localStorage.clear());
 
     // Set up a mock extracted recipe
@@ -306,5 +307,52 @@ test.describe('Step 3: Download - Recipe Export', () => {
     });
 
     expect(typeof hasClearFunction).toBe('boolean');
+  });
+
+  test('should download a gzip-compressed file, not plain JSON', async ({ page }) => {
+    const recipe = { name: 'Gzip Test Recipe', ingredients: 'flour, eggs', directions: ['Mix', 'Bake'] };
+
+    await page.evaluate((r) => {
+      const editor = document.querySelector('#step3 textarea');
+      if (editor) editor.value = JSON.stringify(r, null, 2);
+    }, recipe);
+
+    await page.locator('#step3 .step-header').click();
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 5000 });
+    await page.locator('#step3 .btn-primary').filter({ hasText: /Download/ }).click();
+    const download = await downloadPromise;
+
+    const path = await download.path();
+    const buf = fs.readFileSync(path);
+
+    // Gzip magic bytes: 0x1f 0x8b
+    expect(buf[0]).toBe(0x1f);
+    expect(buf[1]).toBe(0x8b);
+  });
+
+  test('should not include photos or photo_data fields in downloaded file', async ({ page }) => {
+    const recipe = { name: 'No Photos Recipe', ingredients: 'butter', directions: ['Melt butter'] };
+
+    await page.evaluate((r) => {
+      const editor = document.querySelector('#step3 textarea');
+      if (editor) editor.value = JSON.stringify(r, null, 2);
+    }, recipe);
+
+    await page.locator('#step3 .step-header').click();
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 5000 });
+    await page.locator('#step3 .btn-primary').filter({ hasText: /Download/ }).click();
+    const download = await downloadPromise;
+
+    const path = await download.path();
+    const buf = fs.readFileSync(path);
+
+    // Decompress and parse the JSON
+    const { gunzipSync } = require('zlib');
+    const json = JSON.parse(gunzipSync(buf).toString('utf8'));
+
+    expect(json.photos).toBeUndefined();
+    expect(json.photo_data).toBeUndefined();
   });
 });

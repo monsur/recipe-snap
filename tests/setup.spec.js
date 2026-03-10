@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 
 test.describe('Step 1: Setup - API Key Management', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/recipe-snap.html');
+    await page.goto('/');
     // Clear localStorage before each test
     await page.evaluate(() => localStorage.clear());
   });

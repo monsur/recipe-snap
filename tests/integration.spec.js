@@ -3,7 +3,7 @@ const path = require('path');
 
 test.describe('End-to-End Integration Tests', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/recipe-snap.html');
+    await page.goto('/');
     await page.evaluate(() => localStorage.clear());
   });
 

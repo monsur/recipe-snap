@@ -5,7 +5,7 @@ test.describe('Take Photo Camera Feature', () => {
     // Grant camera permissions
     await context.grantPermissions(['camera']);
 
-    await page.goto('/recipe-snap.html');
+    await page.goto('/');
     await page.evaluate(() => {
       localStorage.clear();
       window.uploadedImages = [];
