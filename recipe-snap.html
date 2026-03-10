@@ -1607,30 +1607,7 @@
                     throw new Error('Failed to parse recipe data from API response. Please try again.');
                 }
 
-                // 9. Add photos to recipe JSON with proper schema
-                recipeJson.photos = window.uploadedImages.map((img, index) => {
-                    // Remove the "data:image/jpeg;base64," prefix
-                    const base64Data = img.split(',')[1];
-                    const name = String(index + 1);
-                    return {
-                        name: name,
-                        filename: `${name}.jpg`,
-                        data: base64Data
-                    };
-                });
-
-                // Add top-level photo_data field with first photo's data
-                if (recipeJson.photos.length > 0) {
-                    recipeJson.photo_data = recipeJson.photos[0].data;
-                }
-
-                console.log(`Added ${window.uploadedImages.length} photo(s) to recipe`);
-                window.uploadedImages.forEach((img, i) => {
-                    const sizeKB = Math.round(img.length / 1024);
-                    console.log(`  Photo ${i + 1}: ${sizeKB} KB`);
-                });
-
-                // 10. Store in global state
+                // 9. Store in global state
                 window.extractedRecipe = recipeJson;
 
                 // 11. Display in editor
