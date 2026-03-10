@@ -715,9 +715,8 @@
         .camera-controls {
             display: flex;
             align-items: center;
-            justify-content: center;
-            gap: 1rem;
-            padding: 1.5rem;
+            justify-content: space-between;
+            padding: 1.5rem 2.5rem;
             background: var(--bg);
             border-top: 1px solid var(--border);
         }
@@ -735,8 +734,8 @@
         }
 
         .camera-switch-btn {
-            width: 48px;
-            height: 48px;
+            width: 52px;
+            height: 52px;
             border: 2px solid var(--border);
         }
 
@@ -756,32 +755,47 @@
             stroke-width: 2;
         }
 
+        /* iPhone-style shutter button: outer white ring, inner white filled circle */
         .camera-capture-btn {
-            width: 72px;
-            height: 72px;
-            background: var(--primary);
-            border: 4px solid white;
-            box-shadow: 0 2px 8px var(--shadow);
-        }
-
-        .camera-capture-btn:hover {
-            background: var(--primary-hover);
-            transform: scale(1.05);
+            width: 80px;
+            height: 80px;
+            background: white;
+            border: 4px solid rgba(255,255,255,0.5);
+            box-shadow: 0 0 0 3px rgba(0,0,0,0.15), 0 2px 8px var(--shadow);
         }
 
         .camera-capture-btn:active {
-            transform: scale(0.95);
+            transform: scale(0.92);
         }
 
         .camera-capture-btn svg {
-            width: 32px;
-            height: 32px;
-            stroke: white;
-            stroke-width: 2;
+            display: none;
         }
 
+        /* Green checkmark done button, same size as switch button */
         .camera-done-btn {
-            min-width: 120px;
+            width: 52px;
+            height: 52px;
+            background: #22c55e;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            padding: 0;
+        }
+
+        .camera-done-btn:hover {
+            background: #16a34a;
+        }
+
+        .camera-done-btn svg {
+            width: 26px;
+            height: 26px;
+            stroke: white;
+            stroke-width: 2.5;
         }
 
         /* Loading state for capture button */
@@ -1040,11 +1054,10 @@
                                 </button>
 
                                 <!-- Done button -->
-                                <button id="cameraDoneBtn" class="btn-primary camera-done-btn" onclick="processCapturedPhotos()">
-                                    <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                <button id="cameraDoneBtn" class="camera-done-btn" onclick="processCapturedPhotos()" aria-label="Done">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
                                         <polyline points="20 6 9 17 4 12"></polyline>
                                     </svg>
-                                    <span>Done</span>
                                 </button>
                             </div>
                         </div>
