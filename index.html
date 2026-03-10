@@ -1579,6 +1579,59 @@
         };
 
         /**
+         * Parses a markdown-formatted recipe (fallback when Gemini returns prose instead of JSON).
+         * Handles: # Name, **Key:** Value metadata, ### Section headers, bullet/numbered lists.
+         */
+        function parseMarkdownRecipe(text) {
+            const recipe = {
+                name: '', ingredients: '', directions: '', servings: '',
+                prep_time: '', cook_time: '', description: '', notes: ''
+            };
+            const lines = text.split('\n');
+            let currentSection = null;
+            let sectionLines = [];
+            const stripBold = s => s.replace(/\*\*([^*]+)\*\*/g, '$1');
+
+            function flushSection() {
+                if (!currentSection) return;
+                const key = currentSection.toLowerCase();
+                const content = sectionLines
+                    .map(l => l.replace(/^\* /, '').replace(/^- /, '').replace(/^\d+\.\s+/, ''))
+                    .map(stripBold)
+                    .join('\n')
+                    .trim();
+                if (key.includes('ingredient')) recipe.ingredients = content;
+                else if (key.includes('direction') || key.includes('instruction') || key.includes('method')) recipe.directions = content;
+                else if (key.includes('note')) recipe.notes = content;
+                else if (key.includes('description')) recipe.description = content;
+                sectionLines = [];
+                currentSection = null;
+            }
+
+            for (const line of lines) {
+                if (/^# /.test(line)) {
+                    recipe.name = line.slice(2).trim();
+                } else if (/^#{2,} /.test(line)) {
+                    flushSection();
+                    currentSection = line.replace(/^#+\s+/, '').trim();
+                } else {
+                    const metaMatch = line.match(/^\*\*([^*]+):\*\*\s*(.+)/);
+                    if (metaMatch && !currentSection) {
+                        const key = metaMatch[1].toLowerCase();
+                        const val = metaMatch[2].trim();
+                        if (key === 'servings') recipe.servings = val;
+                        else if (key.includes('prep')) recipe.prep_time = val;
+                        else if (key.includes('cook') || key.includes('bake')) recipe.cook_time = val;
+                    } else if (currentSection) {
+                        sectionLines.push(line);
+                    }
+                }
+            }
+            flushSection();
+            return recipe;
+        }
+
+        /**
          * Extracts recipe from uploaded images using Gemini API
          */
         async function extractRecipe() {
@@ -1669,10 +1722,16 @@
                         try {
                             recipeJson = JSON.parse(text);
                         } catch {
-                            // 3. Last resort: find first {...} block in the response
+                            // 3. Find first {...} block in the response
                             const objectMatch = text.match(/\{[\s\S]*\}/);
-                            if (!objectMatch) throw new Error('No JSON found in response');
-                            recipeJson = JSON.parse(objectMatch[0]);
+                            if (objectMatch) {
+                                recipeJson = JSON.parse(objectMatch[0]);
+                            } else {
+                                // 4. Parse as markdown recipe (model returned prose/markdown instead of JSON)
+                                console.log('No JSON found — attempting markdown parse');
+                                recipeJson = parseMarkdownRecipe(text);
+                                if (!recipeJson.name) throw new Error('No JSON found in response');
+                            }
                         }
                     }
                 } catch (parseError) {
