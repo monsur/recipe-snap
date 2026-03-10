@@ -1572,7 +1572,7 @@
             defaults: {
                 apiKey: '',
                 model: 'gemini-3-flash-preview',
-                prompt: `Analyze the provided image(s) and extract the the recipe into .paprikarecipe format. The images may be out of order.`
+                prompt: `Analyze the provided image(s) and extract the recipe. The images may be out of order. Respond with a single valid JSON object only — no prose, no markdown, no code fences. The JSON should match the Paprika recipe format with fields like name, ingredients, directions, servings, prep_time, cook_time, notes, etc.`
             }
         };
 
@@ -1658,10 +1658,21 @@
                 // 8. Parse JSON from response
                 let recipeJson;
                 try {
-                    // Try to extract JSON from markdown code blocks if present
-                    const jsonMatch = text.match(/```json\n?([\s\S]*?)\n?```/) || text.match(/```\n?([\s\S]*?)\n?```/);
-                    const jsonText = jsonMatch ? jsonMatch[1] : text;
-                    recipeJson = JSON.parse(jsonText);
+                    // 1. Try markdown code fences
+                    const fenceMatch = text.match(/```json\n?([\s\S]*?)\n?```/) || text.match(/```\n?([\s\S]*?)\n?```/);
+                    if (fenceMatch) {
+                        recipeJson = JSON.parse(fenceMatch[1]);
+                    } else {
+                        // 2. Try raw text (prompt asked for JSON only)
+                        try {
+                            recipeJson = JSON.parse(text);
+                        } catch {
+                            // 3. Last resort: find first {...} block in the response
+                            const objectMatch = text.match(/\{[\s\S]*\}/);
+                            if (!objectMatch) throw new Error('No JSON found in response');
+                            recipeJson = JSON.parse(objectMatch[0]);
+                        }
+                    }
                 } catch (parseError) {
                     console.error('Failed to parse JSON:', parseError);
                     throw new Error('Failed to parse recipe data from API response. Please try again.');
