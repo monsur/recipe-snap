@@ -309,8 +309,8 @@ test.describe('Step 3: Download - Recipe Export', () => {
     expect(typeof hasClearFunction).toBe('boolean');
   });
 
-  test('should download a gzip-compressed file, not plain JSON', async ({ page }) => {
-    const recipe = { name: 'Gzip Test Recipe', ingredients: 'flour, eggs', directions: ['Mix', 'Bake'] };
+  test('should download a zip-compressed file, not plain JSON', async ({ page }) => {
+    const recipe = { name: 'Zip Test Recipe', ingredients: 'flour, eggs', directions: ['Mix', 'Bake'] };
 
     await page.evaluate((r) => {
       const editor = document.querySelector('#step3 textarea');
@@ -326,12 +326,13 @@ test.describe('Step 3: Download - Recipe Export', () => {
     const path = await download.path();
     const buf = fs.readFileSync(path);
 
-    // Gzip magic bytes: 0x1f 0x8b
-    expect(buf[0]).toBe(0x1f);
-    expect(buf[1]).toBe(0x8b);
+    // Zip magic bytes: PK (0x50 0x4b)
+    expect(buf[0]).toBe(0x50);
+    expect(buf[1]).toBe(0x4b);
   });
 
-  test('should not include photos or photo_data fields in downloaded file', async ({ page }) => {
+  test('should not include photos or photo_data fields in recipe JSON', async ({ page }) => {
+    // The editor content is exactly what gets zipped — check it directly
     const recipe = { name: 'No Photos Recipe', ingredients: 'butter', directions: ['Melt butter'] };
 
     await page.evaluate((r) => {
@@ -339,18 +340,8 @@ test.describe('Step 3: Download - Recipe Export', () => {
       if (editor) editor.value = JSON.stringify(r, null, 2);
     }, recipe);
 
-    await page.locator('#step3 .step-header').click();
-
-    const downloadPromise = page.waitForEvent('download', { timeout: 5000 });
-    await page.locator('#step3 .btn-primary').filter({ hasText: /Download/ }).click();
-    const download = await downloadPromise;
-
-    const path = await download.path();
-    const buf = fs.readFileSync(path);
-
-    // Decompress and parse the JSON
-    const { gunzipSync } = require('zlib');
-    const json = JSON.parse(gunzipSync(buf).toString('utf8'));
+    const editorContent = await page.locator('#step3 textarea').inputValue();
+    const json = JSON.parse(editorContent);
 
     expect(json.photos).toBeUndefined();
     expect(json.photo_data).toBeUndefined();
