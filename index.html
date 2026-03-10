@@ -961,7 +961,7 @@
                         <div class="advanced-content">
                             <div class="advanced-content-inner">
                                 <label for="model">Model</label>
-                                <input type="text" id="model" placeholder="gemini-1.5-flash">
+                                <input type="text" id="model" placeholder="gemini-3.1-flash-lite-preview">
 
                                 <label for="source">Source</label>
                                 <input type="text" id="source" placeholder="e.g. Baking 101: Cookies">
@@ -1572,7 +1572,7 @@
         const CONFIG = {
             defaults: {
                 apiKey: '',
-                model: 'gemini-3-flash-preview',
+                model: 'gemini-3.1-flash-lite-preview',
                 source: '',
                 prompt: `Analyze the provided image(s) and extract the recipe. The images may be out of order. Respond with a single valid JSON object only — no prose, no markdown, no code fences. The JSON should match the Paprika recipe format with fields like name, ingredients, directions, servings, prep_time, cook_time, notes, etc.`
             }
