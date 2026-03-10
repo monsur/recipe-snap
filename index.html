@@ -1579,6 +1579,45 @@
         };
 
         /**
+         * Normalizes a parsed recipe object into the Paprika flat-string format.
+         * Handles: array ingredients/directions, camelCase field names.
+         */
+        function normalizeRecipe(recipe) {
+            const out = Object.assign({}, recipe);
+
+            // camelCase → snake_case for timing/url fields
+            const remap = {
+                prepTime: 'prep_time', cookTime: 'cook_time', totalTime: 'total_time',
+                sourceUrl: 'source_url', nutritionalInfo: 'nutritional_info'
+            };
+            for (const [from, to] of Object.entries(remap)) {
+                if (from in out && !(to in out)) {
+                    out[to] = out[from];
+                    delete out[from];
+                }
+            }
+
+            // ingredients: array of objects or strings → plain string (one per line)
+            if (Array.isArray(out.ingredients)) {
+                out.ingredients = out.ingredients.map(item => {
+                    if (typeof item === 'string') return item;
+                    const parts = [];
+                    if (item.amount) parts.push(item.amount);
+                    if (item.unit) parts.push(item.unit);
+                    if (item.name) parts.push(item.name);
+                    return parts.join(' ');
+                }).join('\n');
+            }
+
+            // directions: array of strings → plain string (steps separated by blank line)
+            if (Array.isArray(out.directions)) {
+                out.directions = out.directions.join('\n\n');
+            }
+
+            return out;
+        }
+
+        /**
          * Parses a markdown-formatted recipe (fallback when Gemini returns prose instead of JSON).
          * Handles: # Name, **Key:** Value metadata, ### Section headers, bullet/numbered lists.
          */
@@ -1741,6 +1780,9 @@
                     console.error('Failed to parse JSON:', parseError);
                     throw new Error('Failed to parse recipe data from API response. Please try again.');
                 }
+
+                // Normalize to Paprika flat-string format
+                recipeJson = normalizeRecipe(recipeJson);
 
                 // Inject source from user settings
                 const source = localStorage.getItem('source') || CONFIG.defaults.source;
