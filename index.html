@@ -2200,6 +2200,8 @@
             updatePreviewGrid();
             document.getElementById('recipeEditor').value = '';
             document.getElementById('extractionStatus').style.display = 'none';
+            document.getElementById('step3').classList.add('collapsed');
+            document.getElementById('step2').classList.remove('collapsed');
         }
 
         // Initialize form with defaults or saved values on page load
