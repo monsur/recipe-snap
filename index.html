@@ -1609,6 +1609,12 @@
                 }).join('\n');
             }
 
+            // instructions → directions (Gemini sometimes uses the wrong field name)
+            if ('instructions' in out && !('directions' in out)) {
+                out.directions = out.instructions;
+                delete out.instructions;
+            }
+
             // directions: array of strings → plain string (steps separated by blank line)
             if (Array.isArray(out.directions)) {
                 out.directions = out.directions.join('\n\n');
