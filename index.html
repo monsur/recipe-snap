@@ -1574,107 +1574,9 @@
                 apiKey: '',
                 model: 'gemini-3.1-flash-lite-preview',
                 source: '',
-                prompt: `Analyze the provided image(s) and extract the recipe. The images may be out of order. Respond with a single valid JSON object only — no prose, no markdown, no code fences. The JSON should match the Paprika recipe format with fields like name, ingredients, directions, servings, prep_time, cook_time, notes, etc.`
+                prompt: `Analyze the provided image(s) and extract the recipe. The images may be out of order.`
             }
         };
-
-        /**
-         * Normalizes a parsed recipe object into the Paprika flat-string format.
-         * Handles: array ingredients/directions, camelCase field names.
-         */
-        function normalizeRecipe(recipe) {
-            const out = Object.assign({}, recipe);
-
-            // camelCase → snake_case for timing/url fields
-            const remap = {
-                prepTime: 'prep_time', cookTime: 'cook_time', totalTime: 'total_time',
-                sourceUrl: 'source_url', nutritionalInfo: 'nutritional_info'
-            };
-            for (const [from, to] of Object.entries(remap)) {
-                if (from in out && !(to in out)) {
-                    out[to] = out[from];
-                    delete out[from];
-                }
-            }
-
-            // ingredients: array of objects or strings → plain string (one per line)
-            if (Array.isArray(out.ingredients)) {
-                out.ingredients = out.ingredients.map(item => {
-                    if (typeof item === 'string') return item;
-                    const parts = [];
-                    if (item.amount) parts.push(item.amount);
-                    if (item.unit) parts.push(item.unit);
-                    if (item.name) parts.push(item.name);
-                    return parts.join(' ');
-                }).join('\n');
-            }
-
-            // instructions → directions (Gemini sometimes uses the wrong field name)
-            if ('instructions' in out && !('directions' in out)) {
-                out.directions = out.instructions;
-                delete out.instructions;
-            }
-
-            // directions: array of strings → plain string (steps separated by blank line)
-            if (Array.isArray(out.directions)) {
-                out.directions = out.directions.join('\n\n');
-            }
-
-            return out;
-        }
-
-        /**
-         * Parses a markdown-formatted recipe (fallback when Gemini returns prose instead of JSON).
-         * Handles: # Name, **Key:** Value metadata, ### Section headers, bullet/numbered lists.
-         */
-        function parseMarkdownRecipe(text) {
-            const recipe = {
-                name: '', ingredients: '', directions: '', servings: '',
-                prep_time: '', cook_time: '', description: '', notes: ''
-            };
-            const lines = text.split('\n');
-            let currentSection = null;
-            let sectionLines = [];
-            const stripBold = s => s.replace(/\*\*([^*]+)\*\*/g, '$1');
-
-            function flushSection() {
-                if (!currentSection) return;
-                const key = currentSection.toLowerCase();
-                const content = sectionLines
-                    .map(l => l.replace(/^\* /, '').replace(/^- /, '').replace(/^\d+\.\s+/, ''))
-                    .map(stripBold)
-                    .join('\n')
-                    .trim();
-                if (key.includes('ingredient')) recipe.ingredients = content;
-                else if (key.includes('direction') || key.includes('instruction') || key.includes('method')) recipe.directions = content;
-                else if (key.includes('note')) recipe.notes = content;
-                else if (key.includes('description')) recipe.description = content;
-                sectionLines = [];
-                currentSection = null;
-            }
-
-            for (const line of lines) {
-                if (/^# /.test(line)) {
-                    recipe.name = line.slice(2).trim();
-                } else if (/^#{2,} /.test(line)) {
-                    flushSection();
-                    currentSection = line.replace(/^#+\s+/, '').trim();
-                } else {
-                    const metaMatch = line.match(/^\*\*([^*]+):\*\*\s*(.+)/);
-                    if (metaMatch && !currentSection) {
-                        const key = metaMatch[1].toLowerCase();
-                        const val = metaMatch[2].trim();
-                        if (key === 'servings') recipe.servings = val;
-                        else if (key.includes('prep')) recipe.prep_time = val;
-                        else if (key.includes('cook') || key.includes('bake')) recipe.cook_time = val;
-                    } else if (currentSection) {
-                        sectionLines.push(line);
-                    }
-                }
-            }
-            flushSection();
-            return recipe;
-        }
 
         /**
          * Extracts recipe from uploaded images using Gemini API
@@ -1728,7 +1630,24 @@
                         ]
                     }],
                     generationConfig: {
-                        responseMimeType: 'application/json'
+                        responseMimeType: 'application/json',
+                        responseSchema: {
+                            type: 'object',
+                            properties: {
+                                name:        { type: 'string' },
+                                ingredients: { type: 'string', description: 'One ingredient per line, e.g. "1 cup flour"' },
+                                directions:  { type: 'string', description: 'Each step on its own line' },
+                                servings:    { type: 'string' },
+                                prep_time:   { type: 'string' },
+                                cook_time:   { type: 'string' },
+                                total_time:  { type: 'string' },
+                                description: { type: 'string' },
+                                notes:       { type: 'string' },
+                                source:      { type: 'string' },
+                                source_url:  { type: 'string' }
+                            },
+                            required: ['name', 'ingredients', 'directions']
+                        }
                     }
                 };
 
@@ -1761,34 +1680,11 @@
                 // 8. Parse JSON from response
                 let recipeJson;
                 try {
-                    // 1. Try markdown code fences
-                    const fenceMatch = text.match(/```json\n?([\s\S]*?)\n?```/) || text.match(/```\n?([\s\S]*?)\n?```/);
-                    if (fenceMatch) {
-                        recipeJson = JSON.parse(fenceMatch[1]);
-                    } else {
-                        // 2. Try raw text (prompt asked for JSON only)
-                        try {
-                            recipeJson = JSON.parse(text);
-                        } catch {
-                            // 3. Find first {...} block in the response
-                            const objectMatch = text.match(/\{[\s\S]*\}/);
-                            if (objectMatch) {
-                                recipeJson = JSON.parse(objectMatch[0]);
-                            } else {
-                                // 4. Parse as markdown recipe (model returned prose/markdown instead of JSON)
-                                console.log('No JSON found — attempting markdown parse');
-                                recipeJson = parseMarkdownRecipe(text);
-                                if (!recipeJson.name) throw new Error('No JSON found in response');
-                            }
-                        }
-                    }
+                    recipeJson = JSON.parse(text);
                 } catch (parseError) {
                     console.error('Failed to parse JSON:', parseError);
                     throw new Error('Failed to parse recipe data from API response. Please try again.');
                 }
-
-                // Normalize to Paprika flat-string format
-                recipeJson = normalizeRecipe(recipeJson);
 
                 // Inject source from user settings
                 const source = localStorage.getItem('source') || CONFIG.defaults.source;

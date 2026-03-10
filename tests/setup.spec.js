@@ -100,7 +100,7 @@ test.describe('Step 1: Setup - API Key Management', () => {
   test('should have default model value', async ({ page }) => {
     await page.locator('.advanced-toggle').click();
     const modelInput = page.locator('#model');
-    await expect(modelInput).toHaveValue('gemini-3-flash-preview');
+    await expect(modelInput).toHaveValue('gemini-3.1-flash-lite-preview');
   });
 
   test('should clear all data when clear data link is clicked', async ({ page }) => {
@@ -139,7 +139,7 @@ test.describe('Step 1: Setup - API Key Management', () => {
 
     // Verify all inputs are reset to defaults
     await expect(page.locator('#apiKey')).toHaveValue('');
-    await expect(page.locator('#model')).toHaveValue('gemini-3-flash-preview');
+    await expect(page.locator('#model')).toHaveValue('gemini-3.1-flash-lite-preview');
 
     // Verify prompt is reset to a non-empty default value (not checking exact content)
     const promptValue = await page.locator('#prompt').inputValue();

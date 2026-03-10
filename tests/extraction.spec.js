@@ -328,15 +328,15 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
     expect(typeof hasRecipe).toBe('boolean');
   });
 
-  test('should parse JSON wrapped in markdown json code fence', async ({ page }) => {
-    const mockRecipe = { name: 'Fenced Recipe', ingredients: 'flour', directions: ['Mix'] };
+  test('should parse clean JSON response (schema-enforced format)', async ({ page }) => {
+    const mockRecipe = { name: 'Schema Recipe', ingredients: '1 cup flour\n2 eggs', directions: 'Mix well\nBake at 350F' };
 
     await page.route('**/generativelanguage.googleapis.com/**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          candidates: [{ content: { parts: [{ text: '```json\n' + JSON.stringify(mockRecipe) + '\n```' }] } }]
+          candidates: [{ content: { parts: [{ text: JSON.stringify(mockRecipe) }] } }]
         })
       });
     });
@@ -347,18 +347,22 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
     await page.waitForTimeout(1000);
 
     const name = await page.evaluate(() => window.extractedRecipe?.name);
-    expect(name).toBe('Fenced Recipe');
+    expect(name).toBe('Schema Recipe');
   });
 
-  test('should parse JSON wrapped in plain code fence', async ({ page }) => {
-    const mockRecipe = { name: 'Plain Fence Recipe', ingredients: 'eggs', directions: ['Boil'] };
+  test('should parse recipe with all Paprika snake_case fields', async ({ page }) => {
+    const mockRecipe = {
+      name: 'Full Fields Recipe', ingredients: 'butter', directions: 'Melt',
+      prep_time: '10 min', cook_time: '20 min', total_time: '30 min',
+      servings: '4', notes: 'Great dish', source: 'Home', source_url: ''
+    };
 
     await page.route('**/generativelanguage.googleapis.com/**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          candidates: [{ content: { parts: [{ text: '```\n' + JSON.stringify(mockRecipe) + '\n```' }] } }]
+          candidates: [{ content: { parts: [{ text: JSON.stringify(mockRecipe) }] } }]
         })
       });
     });
@@ -368,20 +372,19 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
     await page.locator('#extractBtn').click();
     await page.waitForTimeout(1000);
 
-    const name = await page.evaluate(() => window.extractedRecipe?.name);
-    expect(name).toBe('Plain Fence Recipe');
+    const prepTime = await page.evaluate(() => window.extractedRecipe?.prep_time);
+    expect(prepTime).toBe('10 min');
   });
 
-  test('should parse JSON embedded in surrounding prose', async ({ page }) => {
-    const mockRecipe = { name: 'Prose Recipe', ingredients: 'butter', directions: ['Melt'] };
-    const responseText = 'Here is the extracted recipe in Paprika format:\n' + JSON.stringify(mockRecipe) + '\nI hope that helps!';
+  test('should use directions field (not instructions) from API response', async ({ page }) => {
+    const mockRecipe = { name: 'Directions Recipe', ingredients: 'eggs', directions: 'Boil for 10 min' };
 
     await page.route('**/generativelanguage.googleapis.com/**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          candidates: [{ content: { parts: [{ text: responseText }] } }]
+          candidates: [{ content: { parts: [{ text: JSON.stringify(mockRecipe) }] } }]
         })
       });
     });
@@ -391,8 +394,8 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
     await page.locator('#extractBtn').click();
     await page.waitForTimeout(1000);
 
-    const name = await page.evaluate(() => window.extractedRecipe?.name);
-    expect(name).toBe('Prose Recipe');
+    const directions = await page.evaluate(() => window.extractedRecipe?.directions);
+    expect(directions).toBe('Boil for 10 min');
   });
 
   test('should show error when Gemini returns unparseable text', async ({ page }) => {
