@@ -527,6 +527,40 @@
             background: var(--bg);
         }
 
+        .reset-container {
+            display: flex;
+            justify-content: center;
+            padding: 1.5rem 0 2rem;
+        }
+
+        .btn-reset {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.625rem 1.25rem;
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-light);
+            font-size: 0.875rem;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-reset:hover {
+            border-color: var(--text-light);
+            color: var(--text);
+        }
+
+        .btn-reset svg {
+            width: 15px;
+            height: 15px;
+            stroke: currentColor;
+            stroke-width: 2;
+        }
+
         /* Camera Modal */
         .camera-modal {
             position: fixed;
@@ -1117,6 +1151,17 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- Reset button -->
+        <div class="reset-container">
+            <button class="btn-reset" onclick="resetRecipe()">
+                <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                    <path d="M3 3v5h5"></path>
+                </svg>
+                Start New Recipe
+            </button>
         </div>
     </div>
 
@@ -2133,6 +2178,15 @@
 
                 console.log('All data has been cleared and reset to defaults.');
             }
+        }
+
+        // Resets images and recipe output, keeping API key intact
+        function resetRecipe() {
+            window.uploadedImages = [];
+            window.extractedRecipe = null;
+            updatePreviewGrid();
+            document.getElementById('recipeEditor').value = '';
+            document.getElementById('extractionStatus').style.display = 'none';
         }
 
         // Initialize form with defaults or saved values on page load

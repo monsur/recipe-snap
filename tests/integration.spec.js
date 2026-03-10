@@ -381,4 +381,68 @@ test.describe('End-to-End Integration Tests', () => {
     // Should handle rate limiting gracefully
     expect(attemptCount).toBeGreaterThanOrEqual(1);
   });
+
+  test('reset button is visible on the page', async ({ page }) => {
+    const resetBtn = page.locator('.btn-reset');
+    await expect(resetBtn).toBeVisible();
+    await expect(resetBtn).toContainText('Start New Recipe');
+  });
+
+  test('reset clears uploaded images', async ({ page }) => {
+    await page.evaluate(() => {
+      window.uploadedImages = ['data:image/jpeg;base64,abc123'];
+    });
+
+    let count = await page.evaluate(() => window.uploadedImages.length);
+    expect(count).toBe(1);
+
+    await page.locator('.btn-reset').click();
+
+    count = await page.evaluate(() => window.uploadedImages.length);
+    expect(count).toBe(0);
+  });
+
+  test('reset clears recipe editor and extractedRecipe', async ({ page }) => {
+    await page.evaluate(() => {
+      window.extractedRecipe = { name: 'Old Recipe' };
+      document.getElementById('recipeEditor').value = '{"name":"Old Recipe"}';
+    });
+
+    await page.locator('.btn-reset').click();
+
+    const editorValue = await page.locator('#recipeEditor').inputValue();
+    expect(editorValue).toBe('');
+
+    const extracted = await page.evaluate(() => window.extractedRecipe);
+    expect(extracted).toBeNull();
+  });
+
+  test('reset does not clear the API key', async ({ page }) => {
+    const apiKey = 'keep-this-key';
+    await page.evaluate((key) => localStorage.setItem('geminiApiKey', key), apiKey);
+    await page.evaluate(() => {
+      document.getElementById('apiKey').value = 'keep-this-key';
+    });
+
+    await page.locator('.btn-reset').click();
+
+    const storedKey = await page.evaluate(() => localStorage.getItem('geminiApiKey'));
+    expect(storedKey).toBe(apiKey);
+
+    const inputValue = await page.locator('#apiKey').inputValue();
+    expect(inputValue).toBe(apiKey);
+  });
+
+  test('reset hides extraction status', async ({ page }) => {
+    await page.evaluate(() => {
+      document.getElementById('extractionStatus').style.display = 'flex';
+    });
+
+    await page.locator('.btn-reset').click();
+
+    const display = await page.evaluate(() => {
+      return document.getElementById('extractionStatus').style.display;
+    });
+    expect(display).toBe('none');
+  });
 });
