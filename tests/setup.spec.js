@@ -196,6 +196,52 @@ test.describe('Step 1: Setup - API Key Management', () => {
     await expect(step3).toHaveClass(/collapsed/);
   });
 
+  test('should show source input in advanced options', async ({ page }) => {
+    await page.locator('.advanced-toggle').click();
+    const sourceInput = page.locator('#source');
+    await expect(sourceInput).toBeVisible();
+  });
+
+  test('should save source value to localStorage', async ({ page }) => {
+    await page.locator('#apiKey').fill('test-key');
+    await page.locator('.advanced-toggle').click();
+    await page.locator('#source').fill('My Cookbook');
+    await page.locator('#step1 .btn-primary').click();
+
+    const storedSource = await page.evaluate(() => localStorage.getItem('source'));
+    expect(storedSource).toBe('My Cookbook');
+  });
+
+  test('should load source from localStorage on page load', async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem('geminiApiKey', 'test-api-key');
+      localStorage.setItem('source', 'Persisted Source');
+    });
+    await page.reload();
+
+    await page.locator('#step1 .step-header').click();
+    await page.locator('.advanced-toggle').click();
+    const sourceValue = await page.locator('#source').inputValue();
+    expect(sourceValue).toBe('Persisted Source');
+  });
+
+  test('should reset source to empty on clear all data', async ({ page }) => {
+    await page.locator('#apiKey').fill('test-key');
+    await page.locator('.advanced-toggle').click();
+    await page.locator('#source').fill('My Cookbook');
+    await page.locator('#step1 .btn-primary').click();
+
+    await page.locator('#step1 .step-header').click();
+    await page.locator('.advanced-toggle').click();
+
+    page.on('dialog', dialog => dialog.accept());
+    await page.locator('.clear-data-link').click();
+
+    await expect(page.locator('#source')).toHaveValue('');
+    const storedSource = await page.evaluate(() => localStorage.getItem('source'));
+    expect(storedSource).toBeNull();
+  });
+
   test('should navigate to step 2 after clicking save in step 1', async ({ page }) => {
     // Step 1 should be initially expanded (no API key)
     const step1 = page.locator('#step1');

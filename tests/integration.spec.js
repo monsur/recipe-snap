@@ -445,4 +445,73 @@ test.describe('End-to-End Integration Tests', () => {
     });
     expect(display).toBe('none');
   });
+
+  test('source is injected into extracted recipe JSON when set', async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem('geminiApiKey', 'test-source-key');
+      localStorage.setItem('source', 'My Cookbook');
+    });
+    await page.reload();
+    await page.evaluate(() => {
+      window.uploadedImages = ['data:image/jpeg;base64,/9j/test'];
+    });
+
+    await page.route('**/generativelanguage.googleapis.com/**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          candidates: [{
+            content: {
+              parts: [{
+                text: JSON.stringify({ name: 'Source Test Recipe', ingredients: 'flour', directions: ['mix'] })
+              }]
+            }
+          }]
+        })
+      });
+    });
+
+    await page.locator('#step2 .btn-primary').click();
+    await page.waitForTimeout(1500);
+
+    const extracted = await page.evaluate(() => window.extractedRecipe);
+    expect(extracted).not.toBeNull();
+    expect(extracted.source).toBe('My Cookbook');
+  });
+
+  test('source is not injected when field is empty', async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem('geminiApiKey', 'test-no-source-key');
+      localStorage.removeItem('source');
+    });
+    await page.reload();
+    await page.evaluate(() => {
+      window.uploadedImages = ['data:image/jpeg;base64,/9j/test'];
+    });
+
+    await page.route('**/generativelanguage.googleapis.com/**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          candidates: [{
+            content: {
+              parts: [{
+                text: JSON.stringify({ name: 'No Source Recipe', ingredients: 'flour', directions: ['mix'] })
+              }]
+            }
+          }]
+        })
+      });
+    });
+
+    await page.locator('#step2 .btn-primary').click();
+    await page.waitForTimeout(1500);
+
+    const extracted = await page.evaluate(() => window.extractedRecipe);
+    expect(extracted).not.toBeNull();
+    // source should not be set (or remain as whatever Gemini returned, but not overridden)
+    expect(extracted.source).toBeFalsy();
+  });
 });

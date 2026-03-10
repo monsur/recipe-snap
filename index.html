@@ -963,6 +963,9 @@
                                 <label for="model">Model</label>
                                 <input type="text" id="model" placeholder="gemini-1.5-flash">
 
+                                <label for="source">Source</label>
+                                <input type="text" id="source" placeholder="e.g. Baking 101: Cookies">
+
                                 <label for="prompt">Prompt</label>
                                 <textarea id="prompt" class="editor-placeholder prompt-editor" placeholder="Enter your custom prompt..."></textarea>
 
@@ -1570,6 +1573,7 @@
             defaults: {
                 apiKey: '',
                 model: 'gemini-3-flash-preview',
+                source: '',
                 prompt: `Analyze the provided image(s) and extract the recipe. The images may be out of order. Respond with a single valid JSON object only — no prose, no markdown, no code fences. The JSON should match the Paprika recipe format with fields like name, ingredients, directions, servings, prep_time, cook_time, notes, etc.`
             }
         };
@@ -1674,6 +1678,12 @@
                 } catch (parseError) {
                     console.error('Failed to parse JSON:', parseError);
                     throw new Error('Failed to parse recipe data from API response. Please try again.');
+                }
+
+                // Inject source from user settings
+                const source = localStorage.getItem('source') || CONFIG.defaults.source;
+                if (source) {
+                    recipeJson.source = source;
                 }
 
                 // 9. Store in global state
@@ -2158,11 +2168,13 @@
             // Get values from form fields
             const apiKey = document.getElementById('apiKey').value;
             const model = document.getElementById('model').value;
+            const source = document.getElementById('source').value;
             const prompt = document.getElementById('prompt').value;
 
             // Save to localStorage
             localStorage.setItem('geminiApiKey', apiKey);
             localStorage.setItem('model', model);
+            localStorage.setItem('source', source);
             localStorage.setItem('prompt', prompt);
 
             // Navigate to Step 2 - collapse step 1, expand step 2
@@ -2183,6 +2195,7 @@
                 // Reset form fields to defaults
                 document.getElementById('apiKey').value = CONFIG.defaults.apiKey;
                 document.getElementById('model').value = CONFIG.defaults.model;
+                document.getElementById('source').value = CONFIG.defaults.source;
                 document.getElementById('prompt').value = CONFIG.defaults.prompt;
 
                 // Clear uploaded images
@@ -2209,6 +2222,7 @@
             // Load saved values
             document.getElementById('apiKey').value = localStorage.getItem('geminiApiKey') || CONFIG.defaults.apiKey;
             document.getElementById('model').value = localStorage.getItem('model') || CONFIG.defaults.model;
+            document.getElementById('source').value = localStorage.getItem('source') || CONFIG.defaults.source;
             document.getElementById('prompt').value = localStorage.getItem('prompt') || CONFIG.defaults.prompt;
 
             // Smart step expansion based on saved API key
