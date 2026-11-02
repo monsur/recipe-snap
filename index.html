@@ -1575,8 +1575,59 @@
                 model: 'gemini-3.1-flash-lite-preview',
                 source: '',
                 prompt: `Analyze the provided image(s) and extract the recipe. The images may be out of order.`
+            },
+            // Earlier default values. A saved setting that matches one of these was
+            // never a deliberate choice (Save used to store every field), so it is
+            // discarded and the current default is used instead.
+            previousDefaults: {
+                model: [
+                    'gemini-3-flash-preview'
+                ],
+                prompt: [
+                    `Analyze the provided image(s) and extract the the recipe into .paprikarecipe format. The images may be out of order.`,
+                    `Analyze the provided image(s) and extract the recipe. The images may be out of order. Respond with a single valid JSON object only — no prose, no markdown, no code fences. The JSON should match the Paprika recipe format with fields like name, ingredients, directions, servings, prep_time, cook_time, notes, etc.`
+                ]
             }
         };
+
+        // Settings that fall back to CONFIG.defaults when not customized
+        const DEFAULTABLE_SETTINGS = ['model', 'prompt'];
+
+        /**
+         * Returns true if value is empty or matches the current or a previous
+         * default for the given setting, i.e. the user didn't customize it.
+         */
+        function isDefaultSetting(key, value) {
+            const trimmed = (value || '').trim();
+            if (!trimmed || trimmed === CONFIG.defaults[key].trim()) {
+                return true;
+            }
+            return (CONFIG.previousDefaults[key] || []).some(old => old.trim() === trimmed);
+        }
+
+        /**
+         * Reads a model/prompt setting. Saved values that are just a current or
+         * old default are removed, so default changes reach every user.
+         */
+        function getSetting(key) {
+            const saved = localStorage.getItem(key);
+            if (saved !== null && isDefaultSetting(key, saved)) {
+                localStorage.removeItem(key);
+                return CONFIG.defaults[key];
+            }
+            return saved === null ? CONFIG.defaults[key] : saved;
+        }
+
+        /**
+         * Saves a model/prompt setting only if it differs from the default.
+         */
+        function saveSetting(key, value) {
+            if (isDefaultSetting(key, value)) {
+                localStorage.removeItem(key);
+            } else {
+                localStorage.setItem(key, value.trim());
+            }
+        }
 
         /**
          * Returns a user-facing message if Gemini blocked the request or stopped
@@ -1626,8 +1677,8 @@
             }
 
             // 3. Get model and prompt (with fallbacks to CONFIG.defaults)
-            const model = localStorage.getItem('model') || CONFIG.defaults.model;
-            const prompt = localStorage.getItem('prompt') || CONFIG.defaults.prompt;
+            const model = getSetting('model');
+            const prompt = getSetting('prompt');
 
             // 4. Show loading state
             const extractBtn = document.getElementById('extractBtn');
@@ -2215,9 +2266,9 @@
 
             // Save to localStorage
             localStorage.setItem('geminiApiKey', apiKey);
-            localStorage.setItem('model', model);
+            saveSetting('model', model);
             localStorage.setItem('source', source);
-            localStorage.setItem('prompt', prompt);
+            saveSetting('prompt', prompt);
 
             // Navigate to Step 2 - collapse step 1, expand step 2
             document.getElementById('step1').classList.add('collapsed');
@@ -2263,9 +2314,9 @@
         function initializeForm() {
             // Load saved values
             document.getElementById('apiKey').value = localStorage.getItem('geminiApiKey') || CONFIG.defaults.apiKey;
-            document.getElementById('model').value = localStorage.getItem('model') || CONFIG.defaults.model;
+            document.getElementById('model').value = getSetting('model');
             document.getElementById('source').value = localStorage.getItem('source') || CONFIG.defaults.source;
-            document.getElementById('prompt').value = localStorage.getItem('prompt') || CONFIG.defaults.prompt;
+            document.getElementById('prompt').value = getSetting('prompt');
 
             // Smart step expansion based on saved API key
             const hasApiKey = !!localStorage.getItem('geminiApiKey');

@@ -258,3 +258,88 @@ test.describe('Step 1: Setup - API Key Management', () => {
     await expect(step2).not.toHaveClass(/collapsed/);
   });
 });
+
+test.describe('Settings defaults', () => {
+  const OLD_MODEL = 'gemini-3-flash-preview';
+  const OLD_PROMPT = 'Analyze the provided image(s) and extract the the recipe into .paprikarecipe format. The images may be out of order.';
+
+  // Mocks Gemini and returns a function that gives the last request's model and prompt
+  async function captureGeminiRequest(page) {
+    const seen = {};
+    await page.route('**/generativelanguage.googleapis.com/**', async route => {
+      seen.model = route.request().url().match(/models\/([^:]+):/)[1];
+      seen.prompt = route.request().postDataJSON().contents[0].parts[0].text;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"name":"R","ingredients":"i","directions":"d"}' }] } }] })
+      });
+    });
+    return seen;
+  }
+
+  async function extract(page) {
+    await page.evaluate(() => { window.uploadedImages = ['data:image/jpeg;base64,test']; });
+    await page.locator('#extractBtn').click();
+    await expect.poll(() => page.evaluate(() => window.extractedRecipe?.name)).toBe('R');
+  }
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => localStorage.clear());
+  });
+
+  test('saving without changing model or prompt does not store them', async ({ page }) => {
+    await page.locator('#apiKey').fill('key');
+    await page.locator('#step1 .btn-primary').click();
+
+    const stored = await page.evaluate(() => [localStorage.getItem('model'), localStorage.getItem('prompt')]);
+    expect(stored).toEqual([null, null]);
+  });
+
+  test('a stale saved default model and prompt are replaced by the current defaults', async ({ page }) => {
+    await page.evaluate(([m, p]) => {
+      localStorage.setItem('geminiApiKey', 'key');
+      localStorage.setItem('model', m);
+      localStorage.setItem('prompt', p);
+    }, [OLD_MODEL, OLD_PROMPT]);
+    await page.reload();
+
+    const defaults = await page.evaluate(() => CONFIG.defaults);
+    await expect(page.locator('#model')).toHaveValue(defaults.model);
+    await expect(page.locator('#prompt')).toHaveValue(defaults.prompt);
+    expect(await page.evaluate(() => [localStorage.getItem('model'), localStorage.getItem('prompt')])).toEqual([null, null]);
+
+    const seen = await captureGeminiRequest(page);
+    await extract(page);
+    expect(seen.model).toBe(defaults.model);
+    expect(seen.prompt).toBe(defaults.prompt);
+  });
+
+  test('a custom model and prompt are kept and used', async ({ page }) => {
+    await page.locator('#apiKey').fill('key');
+    await page.locator('.advanced-toggle').click();
+    await page.locator('#model').fill('my-custom-model');
+    await page.locator('#prompt').fill('My custom prompt');
+    await page.locator('#step1 .btn-primary').click();
+    await page.reload();
+
+    const seen = await captureGeminiRequest(page);
+    await extract(page);
+    expect(seen.model).toBe('my-custom-model');
+    expect(seen.prompt).toBe('My custom prompt');
+  });
+
+  test('clearing the model field falls back to the default', async ({ page }) => {
+    await page.locator('#apiKey').fill('key');
+    await page.locator('.advanced-toggle').click();
+    await page.locator('#model').fill('   ');
+    await page.locator('#step1 .btn-primary').click();
+
+    expect(await page.evaluate(() => localStorage.getItem('model'))).toBeNull();
+
+    const seen = await captureGeminiRequest(page);
+    await extract(page);
+    expect(seen.model).toBe(await page.evaluate(() => CONFIG.defaults.model));
+  });
+});
