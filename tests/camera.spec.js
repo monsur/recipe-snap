@@ -379,3 +379,45 @@ test.describe('Switching cameras', () => {
     expect(await page.evaluate(() => window.cameraState.stream)).toBeNull();
   });
 });
+
+test.describe('Processing captured photos', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+  });
+
+  // Puts photos straight into the camera session: 'good' is a valid JPEG,
+  // 'bad' is a data URL that fails to decode.
+  const seedSession = (page, kinds) => page.evaluate((kinds) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 50;
+    canvas.height = 50;
+    canvas.getContext('2d').fillRect(0, 0, 50, 50);
+    const good = canvas.toDataURL('image/jpeg');
+    window.cameraState.capturedPhotos = kinds.map(k => (k === 'good' ? good : 'data:image/jpeg;base64,AAAA'));
+  }, kinds);
+
+  test('adds nothing if any photo fails, so retrying does not duplicate', async ({ page }) => {
+    const dialogs = [];
+    page.on('dialog', async d => { dialogs.push(d.message()); await d.accept(); });
+
+    await seedSession(page, ['good', 'bad']);
+    await page.evaluate(() => processCapturedPhotos());
+
+    expect(dialogs).toEqual(['Failed to process photos. Please try again.']);
+    expect(await page.evaluate(() => window.uploadedImages.length)).toBe(0);
+
+    // User removes the bad photo and taps Done again
+    await page.evaluate(() => { window.cameraState.capturedPhotos.pop(); });
+    await page.evaluate(() => processCapturedPhotos());
+
+    expect(await page.evaluate(() => window.uploadedImages.length)).toBe(1);
+  });
+
+  test('adds every photo when all succeed', async ({ page }) => {
+    await seedSession(page, ['good', 'good', 'good']);
+    await page.evaluate(() => processCapturedPhotos());
+
+    expect(await page.evaluate(() => window.uploadedImages.length)).toBe(3);
+    await expect(page.locator('.preview-item')).toHaveCount(3);
+  });
+});

@@ -1533,7 +1533,9 @@
             try {
                 console.log(`Processing ${window.cameraState.capturedPhotos.length} captured photo(s)...`);
 
-                // Process each captured photo
+                // Process every photo before adding any, so a failure partway
+                // through doesn't leave some added (and duplicated on retry)
+                const processed = [];
                 for (let i = 0; i < window.cameraState.capturedPhotos.length; i++) {
                     const photoData = window.cameraState.capturedPhotos[i];
 
@@ -1547,11 +1549,13 @@
                     // Convert back to base64
                     const resizedBase64 = await imageToBase64(resizedBlob);
 
-                    // Add to main uploaded images array
-                    window.uploadedImages.push(resizedBase64);
+                    processed.push(resizedBase64);
 
                     console.log(`Processed captured photo ${i + 1}/${window.cameraState.capturedPhotos.length}`);
                 }
+
+                // All succeeded: add them to the main uploaded images array
+                window.uploadedImages.push(...processed);
 
                 // Update main preview grid
                 updatePreviewGrid();
