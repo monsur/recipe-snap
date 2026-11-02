@@ -2045,6 +2045,9 @@
             console.log(`Downloaded recipe as ${filename}`);
         }
 
+        // Pending timer that restores the Copy button label
+        let copyFeedbackTimer = null;
+
         /**
          * Copies recipe JSON to clipboard
          */
@@ -2056,9 +2059,14 @@
                 // Use modern Clipboard API
                 await navigator.clipboard.writeText(jsonText);
 
-                // Show success feedback (temporary button text change)
+                // Show success feedback (temporary button text change).
+                // Keep the original label on the element, so a second tap while
+                // "Copied!" is showing doesn't capture "Copied!" as the label.
                 const copyBtn = document.querySelector('#step3 .btn-secondary');
-                const originalContent = copyBtn.innerHTML;
+                if (copyBtn.dataset.originalHtml === undefined) {
+                    copyBtn.dataset.originalHtml = copyBtn.innerHTML;
+                }
+                clearTimeout(copyFeedbackTimer);
                 copyBtn.innerHTML = `
                     <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="20 6 9 17 4 12"></polyline>
@@ -2067,8 +2075,8 @@
                 `;
 
                 // Reset after 2 seconds
-                setTimeout(() => {
-                    copyBtn.innerHTML = originalContent;
+                copyFeedbackTimer = setTimeout(() => {
+                    copyBtn.innerHTML = copyBtn.dataset.originalHtml;
                 }, 2000);
 
                 console.log('Recipe copied to clipboard');

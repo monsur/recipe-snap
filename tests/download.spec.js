@@ -315,3 +315,24 @@ test.describe('Step 3: Download - Recipe Export', () => {
     expect(json.photo_data).toBeUndefined();
   });
 });
+
+test.describe('Copy button feedback', () => {
+  test('tapping Copy twice quickly still restores the original label', async ({ page }) => {
+    await page.goto('/');
+    await stubClipboard(page);
+    await page.evaluate(() => { document.getElementById('recipeEditor').value = '{"name":"x"}'; });
+    await expandStep(page, 'step3');
+
+    const copyBtn = page.locator('#step3 .btn-secondary');
+    await copyBtn.click();
+    await expect(copyBtn).toContainText('Copied!');
+    await copyBtn.click();
+    await expect(copyBtn).toContainText('Copied!');
+
+    // Reverts 2s after the last tap, to the real label
+    await expect(copyBtn).toContainText('Copy to Clipboard', { timeout: 4000 });
+    await page.waitForTimeout(2500);
+    await expect(copyBtn).toContainText('Copy to Clipboard');
+    await expect(copyBtn).not.toContainText('Copied!');
+  });
+});
