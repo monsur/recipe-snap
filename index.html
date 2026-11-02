@@ -948,7 +948,7 @@
                         <div class="advanced-content">
                             <div class="advanced-content-inner">
                                 <label for="model">Model</label>
-                                <input type="text" id="model" placeholder="gemini-3.1-flash-lite-preview">
+                                <input type="text" id="model" placeholder="gemini-3.5-flash-lite">
 
                                 <label for="source">Source</label>
                                 <input type="text" id="source" placeholder="e.g. Baking 101: Cookies">
@@ -1558,7 +1558,7 @@
         const CONFIG = {
             defaults: {
                 apiKey: '',
-                model: 'gemini-3.1-flash-lite-preview',
+                model: 'gemini-3.5-flash-lite',
                 source: '',
                 prompt: `Analyze the provided image(s) and extract the recipe. The images may be out of order.`
             },
@@ -1582,7 +1582,8 @@
             // discarded and the current default is used instead.
             previousDefaults: {
                 model: [
-                    'gemini-3-flash-preview'
+                    'gemini-3-flash-preview',
+                    'gemini-3.1-flash-lite-preview'
                 ],
                 prompt: [
                     `Analyze the provided image(s) and extract the the recipe into .paprikarecipe format. The images may be out of order.`,

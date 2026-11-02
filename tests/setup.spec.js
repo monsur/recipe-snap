@@ -100,7 +100,7 @@ test.describe('Step 1: Setup - API Key Management', () => {
   test('should have default model value', async ({ page }) => {
     await page.locator('.advanced-toggle').click();
     const modelInput = page.locator('#model');
-    await expect(modelInput).toHaveValue('gemini-3.1-flash-lite-preview');
+    await expect(modelInput).toHaveValue('gemini-3.5-flash-lite');
   });
 
   test('should clear all data when clear data link is clicked', async ({ page }) => {
@@ -139,7 +139,7 @@ test.describe('Step 1: Setup - API Key Management', () => {
 
     // Verify all inputs are reset to defaults
     await expect(page.locator('#apiKey')).toHaveValue('');
-    await expect(page.locator('#model')).toHaveValue('gemini-3.1-flash-lite-preview');
+    await expect(page.locator('#model')).toHaveValue('gemini-3.5-flash-lite');
 
     // Verify prompt is reset to a non-empty default value (not checking exact content)
     const promptValue = await page.locator('#prompt').inputValue();
@@ -260,7 +260,8 @@ test.describe('Step 1: Setup - API Key Management', () => {
 });
 
 test.describe('Settings defaults', () => {
-  const OLD_MODEL = 'gemini-3-flash-preview';
+  // Earlier defaults, including the shut-down 3.1 Flash-Lite preview
+  const OLD_MODELS = ['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'];
   const OLD_PROMPT = 'Analyze the provided image(s) and extract the the recipe into .paprikarecipe format. The images may be out of order.';
 
   // Mocks Gemini and returns a function that gives the last request's model and prompt
@@ -297,12 +298,13 @@ test.describe('Settings defaults', () => {
     expect(stored).toEqual([null, null]);
   });
 
-  test('a stale saved default model and prompt are replaced by the current defaults', async ({ page }) => {
+  for (const oldModel of OLD_MODELS) {
+  test(`a stale saved default (${oldModel}) and prompt are replaced by the current defaults`, async ({ page }) => {
     await page.evaluate(([m, p]) => {
       localStorage.setItem('geminiApiKey', 'key');
       localStorage.setItem('model', m);
       localStorage.setItem('prompt', p);
-    }, [OLD_MODEL, OLD_PROMPT]);
+    }, [oldModel, OLD_PROMPT]);
     await page.reload();
 
     const defaults = await page.evaluate(() => CONFIG.defaults);
@@ -315,6 +317,7 @@ test.describe('Settings defaults', () => {
     expect(seen.model).toBe(defaults.model);
     expect(seen.prompt).toBe(defaults.prompt);
   });
+  }
 
   test('a custom model and prompt are kept and used', async ({ page }) => {
     await page.locator('#apiKey').fill('key');
