@@ -1797,8 +1797,13 @@
                 throw new Error(blockedMessage);
             }
 
-            // Extract text from response
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            // Extract text from response. Gemini may split it across several
+            // parts; thinking models can also include "thought" parts to skip.
+            const parts = data.candidates?.[0]?.content?.parts || [];
+            const text = parts
+                .filter(part => typeof part.text === 'string' && !part.thought)
+                .map(part => part.text)
+                .join('');
             if (!text) {
                 throw new Error('No text content in API response');
             }

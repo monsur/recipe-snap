@@ -511,6 +511,27 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
     expect(msg).toBe('');
     expect(await page.evaluate(() => window.extractedRecipe?.ingredients)).toBe('1 egg');
   });
+  test('should join a reply split across several parts', async ({ page }) => {
+    const msg = await extractWithResponse(page, {
+      candidates: [{ content: { parts: [
+        { text: '{"name":"Spl' },
+        { text: 'it Soup","ingredients":"Water","directions":"Boil"}' }
+      ] } }]
+    });
+    expect(msg).toBe('');
+    expect(await page.evaluate(() => window.extractedRecipe?.name)).toBe('Split Soup');
+  });
+
+  test('should ignore thought parts from thinking models', async ({ page }) => {
+    const msg = await extractWithResponse(page, {
+      candidates: [{ content: { parts: [
+        { text: 'Looking at the photo, this is a soup recipe...', thought: true },
+        { text: '{"name":"Thoughtful Soup","ingredients":"Water","directions":"Boil"}' }
+      ] } }]
+    });
+    expect(msg).toBe('');
+    expect(await page.evaluate(() => window.extractedRecipe?.name)).toBe('Thoughtful Soup');
+  });
 });
 
 test.describe('Retrying temporary failures', () => {
