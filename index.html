@@ -1076,7 +1076,7 @@
                                 </button>
 
                                 <!-- Done button -->
-                                <button id="cameraDoneBtn" class="camera-done-btn" onclick="processCapturedPhotos()" aria-label="Done">
+                                <button id="cameraDoneBtn" class="camera-done-btn" onclick="processCapturedPhotos()" aria-label="Done" style="visibility: hidden;">
                                     <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
                                         <polyline points="20 6 9 17 4 12"></polyline>
                                     </svg>
@@ -1439,6 +1439,11 @@
          */
         function updateSessionThumbnails() {
             const container = document.getElementById('cameraSessionThumbnails');
+
+            // Done only appears once there's a photo to add. It is made invisible
+            // rather than removed, so the shutter button doesn't shift.
+            document.getElementById('cameraDoneBtn').style.visibility =
+                window.cameraState.capturedPhotos.length > 0 ? 'visible' : 'hidden';
 
             if (window.cameraState.capturedPhotos.length === 0) {
                 container.style.display = 'none';

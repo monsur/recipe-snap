@@ -59,7 +59,6 @@ test.describe('Take Photo Camera Feature', () => {
 
     await expect(page.locator('#cameraVideo')).toBeVisible();
     await expect(page.locator('#cameraCaptureBtn')).toBeVisible();
-    await expect(page.locator('#cameraDoneBtn')).toBeVisible();
     await expect(page.locator('#cameraError')).toBeHidden();
   });
 
@@ -183,10 +182,41 @@ test.describe('Take Photo Camera Feature', () => {
     await expect(page.locator('.camera-modal-close')).toHaveAttribute('aria-label', /.+/);
   });
 
-  test('should close modal when Done clicked with no photos', async ({ page }) => {
+  test('Done is hidden until a photo is taken', async ({ page }) => {
     await openCameraReady(page);
-    await page.locator('#cameraDoneBtn').click();
-    await expect(page.locator('#cameraModal')).not.toBeVisible();
+    const doneBtn = page.locator('#cameraDoneBtn');
+    await expect(doneBtn).toBeHidden();
+
+    await capture(page, 1);
+    await expect(doneBtn).toBeVisible();
+  });
+
+  test('Done hides again when every photo is removed', async ({ page }) => {
+    await openCameraReady(page);
+    await capture(page, 1);
+    await expect(page.locator('#cameraDoneBtn')).toBeVisible();
+
+    await page.locator('.camera-session-thumbnail-remove').click();
+    await expect(page.locator('#cameraDoneBtn')).toBeHidden();
+  });
+
+  test('Done is hidden again when the camera is reopened', async ({ page }) => {
+    await openCameraReady(page);
+    await capture(page, 1);
+    await page.locator('.camera-modal-close').click();
+    await expect(page.locator('#cameraModal')).toBeHidden();
+
+    await openCameraReady(page);
+    await expect(page.locator('#cameraDoneBtn')).toBeHidden();
+  });
+
+  test('hiding Done does not move the shutter button', async ({ page }) => {
+    await openCameraReady(page);
+    const before = await page.locator('#cameraCaptureBtn').boundingBox();
+    await capture(page, 1);
+    await expect(page.locator('#cameraDoneBtn')).toBeVisible();
+    const after = await page.locator('#cameraCaptureBtn').boundingBox();
+    expect(after.x).toBeCloseTo(before.x, 0);
   });
 
   test('should reset Done button after processing so the next session can submit', async ({ page }) => {
