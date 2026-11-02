@@ -10,19 +10,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <!-- HEIC image conversion library - using heic-to (libheif 1.20.2) -->
-    <script src="https://cdn.jsdelivr.net/npm/heic-to@1.3.0/dist/iife/heic-to.js"></script>
-    <script>
-        // Verify heic-to library loaded (creates global HeicTo object)
-        window.addEventListener('DOMContentLoaded', function() {
-            if (typeof HeicTo !== 'undefined') {
-                console.log('✓ HEIC conversion ready (libheif 1.20.2)');
-            } else {
-                console.error('⚠ HEIC conversion library failed to load');
-            }
-        });
-    </script>
-
     <style>
         :root {
             /* Clean, minimal palette */
@@ -2136,6 +2123,43 @@
             return true;
         }
 
+        // HEIC image conversion library - heic-to (libheif 1.20.2). Defines a global HeicTo.
+        const HEIC_LIBRARY_URL = 'https://cdn.jsdelivr.net/npm/heic-to@1.3.0/dist/iife/heic-to.js';
+        let heicLibraryPromise = null;
+
+        /**
+         * Loads the HEIC library the first time it's needed, instead of making
+         * every visitor download it before the page renders.
+         * @returns {Promise<void>}
+         */
+        function loadHeicLibrary() {
+            if (typeof HeicTo !== 'undefined') {
+                return Promise.resolve();
+            }
+            if (!heicLibraryPromise) {
+                heicLibraryPromise = new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = HEIC_LIBRARY_URL;
+                    script.onload = () => {
+                        if (typeof HeicTo === 'undefined') {
+                            reject(new Error('HEIC conversion library did not initialize. Please use JPG or PNG format.'));
+                        } else {
+                            console.log('✓ HEIC conversion ready');
+                            resolve();
+                        }
+                    };
+                    script.onerror = () => {
+                        // Allow a later upload to try again
+                        heicLibraryPromise = null;
+                        script.remove();
+                        reject(new Error('HEIC conversion library could not be loaded. Check your connection, or use JPG or PNG format.'));
+                    };
+                    document.head.appendChild(script);
+                });
+            }
+            return heicLibraryPromise;
+        }
+
         /**
          * Converts HEIC images to JPEG format
          * @param {File} file - HEIC file to convert
@@ -2143,10 +2167,8 @@
          */
         async function convertHeicToJpeg(file) {
             try {
-                // Check if HeicTo is available
-                if (typeof HeicTo === 'undefined') {
-                    throw new Error('HEIC conversion library not loaded. Please use JPG or PNG format.');
-                }
+                // Load the converter on first use (it's ~2.5 MB)
+                await loadHeicLibrary();
 
                 console.log(`Converting HEIC file: ${file.name}`);
 

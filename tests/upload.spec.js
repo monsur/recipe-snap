@@ -109,13 +109,13 @@ test.describe('Step 2: Upload - Image Handling', () => {
     await expect(previewGrid).toBeAttached();
   });
 
-  test('should handle HEIC file conversion', async ({ page }) => {
-    // Check if heic2any library will be loaded
-    const scriptsWithHeic = page.locator('script[src*="heic"]');
-
-    // This will help verify the library is included once implemented
-    const scriptCount = await scriptsWithHeic.count();
-    expect(scriptCount).toBeGreaterThanOrEqual(0);
+  test('should not download the HEIC library on page load', async ({ page }) => {
+    const heicRequests = [];
+    page.on('request', r => { if (r.url().includes('heic-to')) heicRequests.push(r.url()); });
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    expect(heicRequests).toEqual([]);
+    expect(await page.evaluate(() => typeof HeicTo)).toBe('undefined');
   });
 
   test('should resize images to max 1600px', async ({ page }) => {
@@ -454,5 +454,59 @@ test.describe('File type handling', () => {
     await page.locator('#extractBtn').click();
     await expect.poll(() => parts).not.toBeNull();
     expect(parts[0].inlineData.mimeType).toBe('image/webp');
+  });
+});
+
+test.describe('HEIC conversion (library loaded on demand)', () => {
+  // Stand-in for the heic-to library: converts any input to a 10x10 JPEG
+  const FAKE_HEIC_LIBRARY = `
+    window.HeicTo = async () => {
+      const c = document.createElement('canvas');
+      c.width = 10; c.height = 10;
+      c.getContext('2d').fillRect(0, 0, 10, 10);
+      return new Promise(resolve => c.toBlob(resolve, 'image/jpeg'));
+    };`;
+  const heicFile = name => ({ name, mimeType: 'image/heic', buffer: Buffer.from('not really heic') });
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#step2 .step-header').click();
+  });
+
+  test('loads the library on the first HEIC upload, once', async ({ page }) => {
+    let libraryRequests = 0;
+    await page.route('**/heic-to@*/**', route => {
+      libraryRequests++;
+      return route.fulfill({ status: 200, contentType: 'application/javascript', body: FAKE_HEIC_LIBRARY });
+    });
+
+    await page.locator('#fileInput').setInputFiles(heicFile('a.heic'));
+    await expect(page.locator('.preview-item')).toHaveCount(1);
+    await page.locator('#fileInput').setInputFiles(heicFile('b.HEIF'));
+    await expect(page.locator('.preview-item')).toHaveCount(2);
+
+    expect(libraryRequests).toBe(1);
+    const types = await page.evaluate(() => window.uploadedImages.map(d => d.split(';')[0]));
+    expect(types).toEqual(['data:image/jpeg', 'data:image/jpeg']);
+  });
+
+  test('reports a failed library download and retries on the next upload', async ({ page }) => {
+    const dialogs = [];
+    page.on('dialog', async d => { dialogs.push(d.message()); await d.accept(); });
+
+    let fail = true;
+    await page.route('**/heic-to@*/**', route => (fail
+      ? route.fulfill({ status: 503, body: '' })
+      : route.fulfill({ status: 200, contentType: 'application/javascript', body: FAKE_HEIC_LIBRARY })));
+
+    await page.locator('#fileInput').setInputFiles(heicFile('photo.heic'));
+    await expect.poll(() => dialogs.length).toBe(1);
+    expect(dialogs[0]).toContain('photo.heic');
+    expect(dialogs[0]).toContain('could not be loaded');
+    await expect(page.locator('.preview-item')).toHaveCount(0);
+
+    fail = false;
+    await page.locator('#fileInput').setInputFiles(heicFile('photo.heic'));
+    await expect(page.locator('.preview-item')).toHaveCount(1);
   });
 });
