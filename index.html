@@ -1413,16 +1413,8 @@
             }, 150);
 
             try {
-                // Set canvas dimensions to match video
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-
-                // Draw video frame to canvas
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-                // Convert canvas to base64 data URL (JPEG for smaller size)
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+                // Encode the frame at its final size now, so Done has nothing left to do
+                const dataUrl = encodeImage(video, video.videoWidth, video.videoHeight, canvas);
 
                 // Add to captured photos array
                 window.cameraState.capturedPhotos.push(dataUrl);
@@ -1497,69 +1489,21 @@
         }
 
         /**
-         * Processes all captured photos and adds them to main upload array
+         * Adds the session's captured photos to the main upload array
          * Resizes images and closes camera modal
          */
-        async function processCapturedPhotos() {
-            const doneBtn = document.getElementById('cameraDoneBtn');
+        function processCapturedPhotos() {
+            const count = window.cameraState.capturedPhotos.length;
 
-            // Check if any photos were captured
-            if (window.cameraState.capturedPhotos.length === 0) {
-                closeCamera();
-                return;
-            }
-
-            // Show loading state
-            const originalContent = doneBtn.innerHTML;
-            doneBtn.innerHTML = `
-                <span class="loading-spinner"></span>
-                <span>Processing ${window.cameraState.capturedPhotos.length} photo(s)...</span>
-            `;
-            doneBtn.disabled = true;
-
-            try {
-                console.log(`Processing ${window.cameraState.capturedPhotos.length} captured photo(s)...`);
-
-                // Process every photo before adding any, so a failure partway
-                // through doesn't leave some added (and duplicated on retry)
-                const processed = [];
-                for (let i = 0; i < window.cameraState.capturedPhotos.length; i++) {
-                    const photoData = window.cameraState.capturedPhotos[i];
-
-                    // Convert base64 to blob for processing
-                    const response = await fetch(photoData);
-                    const blob = await response.blob();
-
-                    // Resize image using existing function
-                    const resizedBlob = await resizeImage(blob);
-
-                    // Convert back to base64
-                    const resizedBase64 = await imageToBase64(resizedBlob);
-
-                    processed.push(resizedBase64);
-
-                    console.log(`Processed captured photo ${i + 1}/${window.cameraState.capturedPhotos.length}`);
-                }
-
-                // All succeeded: add them to the main uploaded images array
-                window.uploadedImages.push(...processed);
-
-                // Update main preview grid
+            // Photos were encoded at their final size when captured, so they
+            // can be added as they are
+            window.uploadedImages.push(...window.cameraState.capturedPhotos);
+            if (count > 0) {
                 updatePreviewGrid();
-
-                // Close camera modal
-                closeCamera();
-
-                console.log(`Successfully processed ${window.cameraState.capturedPhotos.length} photos. Total images: ${window.uploadedImages.length}`);
-
-            } catch (error) {
-                console.error('Error processing captured photos:', error);
-                alert('Failed to process photos. Please try again.');
-            } finally {
-                // Restore button state so the next camera session starts clean
-                doneBtn.innerHTML = originalContent;
-                doneBtn.disabled = false;
+                console.log(`Added ${count} captured photo(s). Total images: ${window.uploadedImages.length}`);
             }
+
+            closeCamera();
         }
 
         /**
@@ -1612,6 +1556,12 @@
                 model: 'gemini-3.1-flash-lite-preview',
                 source: '',
                 prompt: `Analyze the provided image(s) and extract the recipe. The images may be out of order.`
+            },
+            // Every image sent to Gemini is a JPEG no larger than this on its
+            // longest side. Images are encoded at most once, at this quality.
+            image: {
+                maxSize: 1600,
+                jpegQuality: 0.92
             },
             // How long a downloaded file's blob URL stays valid
             downloadUrlLifetimeMs: 60000,
@@ -1888,8 +1838,7 @@
             try {
                 // 5. Prepare image parts for API
                 const imageParts = window.uploadedImages.map(dataUrl => {
-                    // Split "data:image/png;base64,<data>" into its type and data.
-                    // Small images skip re-encoding, so they may be PNG, not JPEG.
+                    // Split "data:image/jpeg;base64,<data>" into its type and data
                     const [header, base64Content] = dataUrl.split(',');
                     const mimeType = header.match(/^data:([^;]+)/)?.[1] || 'image/jpeg';
                     return {
@@ -2159,26 +2108,16 @@
         }
 
         /**
-         * Converts HEIC images to JPEG format
-         * @param {File} file - HEIC file to convert
-         * @returns {Promise<Blob>} - Converted JPEG blob
+         * Decodes a HEIC/HEIF file to a bitmap (no intermediate JPEG, so the
+         * image is only encoded once, by encodeImage)
+         * @param {File} file - HEIC file to decode
+         * @returns {Promise<ImageBitmap>}
          */
-        async function convertHeicToJpeg(file) {
+        async function decodeHeic(file) {
             try {
                 // Load the converter on first use (it's ~2.5 MB)
                 await loadHeicLibrary();
-
-                console.log(`Converting HEIC file: ${file.name}`);
-
-                // HeicTo is the function itself, call it directly
-                const convertedBlob = await HeicTo({
-                    blob: file,
-                    type: 'image/jpeg',
-                    quality: 0.9
-                });
-
-                console.log(`✓ Converted ${file.name} to JPEG (${Math.round(convertedBlob.size / 1024)}KB)`);
-                return convertedBlob;
+                return await HeicTo({ blob: file, type: 'bitmap' });
             } catch (error) {
                 const errorMsg = error.message.includes('not supported') || error.message.includes('LIBHEIF')
                     ? `HEIC format not supported. Please convert ${file.name} to JPG or PNG.`
@@ -2189,66 +2128,53 @@
         }
 
         /**
-         * Resizes image to maximum 1600px on longest side while maintaining aspect ratio
-         * @param {Blob|File} imageBlob - Image to resize
-         * @returns {Promise<Blob>} - Resized image blob
+         * Decodes an image file the browser can read natively (JPEG, PNG, WebP)
+         * @param {Blob} blob - Image to decode
+         * @returns {Promise<HTMLImageElement>}
          */
-        function resizeImage(imageBlob) {
+        function loadImage(blob) {
             return new Promise((resolve, reject) => {
-                const maxSize = 1600;
-
-                // Create image element to get dimensions
                 const img = new Image();
-                const objectUrl = URL.createObjectURL(imageBlob);
-
-                img.onload = function() {
-                    // Calculate new dimensions
-                    let width = img.width;
-                    let height = img.height;
-
-                    // Only resize if image exceeds max size
-                    if (width <= maxSize && height <= maxSize) {
-                        URL.revokeObjectURL(objectUrl);
-                        resolve(imageBlob);
-                        return;
-                    }
-
-                    // Calculate scaling factor
-                    const scale = Math.min(maxSize / width, maxSize / height);
-                    width = Math.floor(width * scale);
-                    height = Math.floor(height * scale);
-
-                    // Create canvas and resize
-                    const canvas = document.createElement('canvas');
-                    canvas.width = width;
-                    canvas.height = height;
-
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-
-                    // Convert canvas to blob
-                    canvas.toBlob(
-                        (blob) => {
-                            URL.revokeObjectURL(objectUrl);
-                            if (blob) {
-                                console.log(`Resized image to ${width}x${height}`);
-                                resolve(blob);
-                            } else {
-                                reject(new Error('Failed to create blob from canvas'));
-                            }
-                        },
-                        'image/jpeg',
-                        0.92
-                    );
-                };
-
-                img.onerror = function() {
+                const objectUrl = URL.createObjectURL(blob);
+                img.onload = () => {
                     URL.revokeObjectURL(objectUrl);
-                    reject(new Error('Failed to load image for resizing'));
+                    resolve(img);
                 };
-
+                img.onerror = () => {
+                    URL.revokeObjectURL(objectUrl);
+                    reject(new Error('Failed to load image'));
+                };
                 img.src = objectUrl;
             });
+        }
+
+        /**
+         * Returns the size that fits within CONFIG.image.maxSize on the longest
+         * side, keeping the aspect ratio. Never enlarges.
+         */
+        function fitImageSize(width, height) {
+            const scale = Math.min(1, CONFIG.image.maxSize / width, CONFIG.image.maxSize / height);
+            return {
+                width: Math.max(1, Math.round(width * scale)),
+                height: Math.max(1, Math.round(height * scale))
+            };
+        }
+
+        /**
+         * The single place images are encoded: draws the source at its final
+         * size and returns a JPEG data URL at CONFIG.image.jpegQuality.
+         * @param {CanvasImageSource} source - Image, bitmap, or video frame
+         * @param {number} sourceWidth
+         * @param {number} sourceHeight
+         * @param {HTMLCanvasElement} [canvas] - Canvas to draw on (a new one if omitted)
+         * @returns {string} - JPEG data URL
+         */
+        function encodeImage(source, sourceWidth, sourceHeight, canvas = document.createElement('canvas')) {
+            const { width, height } = fitImageSize(sourceWidth, sourceHeight);
+            canvas.width = width;
+            canvas.height = height;
+            canvas.getContext('2d').drawImage(source, 0, 0, width, height);
+            return canvas.toDataURL('image/jpeg', CONFIG.image.jpegQuality);
         }
 
         /**
@@ -2273,7 +2199,8 @@
         }
 
         /**
-         * Processes a single image: validates, converts if needed, resizes, and converts to base64
+         * Turns an uploaded file into a JPEG data URL of at most CONFIG.image.maxSize,
+         * encoding it at most once
          * @param {File} file - Image file to process
          * @returns {Promise<string>} - Base64 data URL
          */
@@ -2284,20 +2211,26 @@
                     throw new Error('unsupported file type');
                 }
 
-                // Convert HEIC to JPEG if needed
-                let imageBlob = file;
-                const isHeic = /\.hei[cf]$/i.test(file.name);
-                if (isHeic) {
-                    imageBlob = await convertHeicToJpeg(file);
+                if (/\.hei[cf]$/i.test(file.name)) {
+                    const bitmap = await decodeHeic(file);
+                    try {
+                        return encodeImage(bitmap, bitmap.width, bitmap.height);
+                    } finally {
+                        bitmap.close?.();
+                    }
                 }
 
-                // Resize image
-                const resizedBlob = await resizeImage(imageBlob);
+                const img = await loadImage(file);
+                const isJpeg = file.type === 'image/jpeg' || /\.jpe?g$/i.test(file.name);
+                const fits = img.naturalWidth <= CONFIG.image.maxSize && img.naturalHeight <= CONFIG.image.maxSize;
 
-                // Convert to base64
-                const base64 = await imageToBase64(resizedBlob);
+                // A JPEG that already fits is sent untouched: re-encoding would
+                // only lose quality
+                if (isJpeg && fits) {
+                    return await imageToBase64(file);
+                }
 
-                return base64;
+                return encodeImage(img, img.naturalWidth, img.naturalHeight);
             } catch (error) {
                 console.log(`Error processing image ${file.name}:`, error.message);
                 throw error;

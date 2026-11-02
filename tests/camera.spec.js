@@ -381,43 +381,54 @@ test.describe('Switching cameras', () => {
 });
 
 test.describe('Processing captured photos', () => {
-  test.beforeEach(async ({ page }) => {
+  test('captures are encoded once, at 1600px, and Done adds them unchanged', async ({ page }) => {
+    // A camera larger than the 1600px limit
+    await page.addInitScript(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 2400;
+      canvas.height = 1350;
+      const ctx = canvas.getContext('2d');
+      let hue = 0;
+      setInterval(() => {
+        ctx.fillStyle = `hsl(${hue = (hue + 10) % 360}, 60%, 50%)`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }, 50);
+      MediaDevices.prototype.getUserMedia = async () => canvas.captureStream(20);
+      MediaDevices.prototype.enumerateDevices = async () => [
+        { kind: 'videoinput', label: 'Back Camera', deviceId: 'back' }
+      ];
+    });
     await page.goto('/');
-  });
 
-  // Puts photos straight into the camera session: 'good' is a valid JPEG,
-  // 'bad' is a data URL that fails to decode.
-  const seedSession = (page, kinds) => page.evaluate((kinds) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 50;
-    canvas.height = 50;
-    canvas.getContext('2d').fillRect(0, 0, 50, 50);
-    const good = canvas.toDataURL('image/jpeg');
-    window.cameraState.capturedPhotos = kinds.map(k => (k === 'good' ? good : 'data:image/jpeg;base64,AAAA'));
-  }, kinds);
+    await openCameraReady(page);
+    await page.evaluate(() => {
+      window.__encodeCount = 0;
+      const original = HTMLCanvasElement.prototype.toDataURL;
+      HTMLCanvasElement.prototype.toDataURL = function (...args) {
+        window.__encodeCount++;
+        return original.apply(this, args);
+      };
+    });
 
-  test('adds nothing if any photo fails, so retrying does not duplicate', async ({ page }) => {
-    const dialogs = [];
-    page.on('dialog', async d => { dialogs.push(d.message()); await d.accept(); });
+    await capture(page, 1);
+    await capture(page, 2);
+    const captured = await page.evaluate(() => [...window.cameraState.capturedPhotos]);
 
-    await seedSession(page, ['good', 'bad']);
-    await page.evaluate(() => processCapturedPhotos());
+    // Already a JPEG at its final size when captured
+    expect(captured.every(d => d.startsWith('data:image/jpeg;base64,'))).toBe(true);
+    const size = await page.evaluate(src => new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => resolve([img.naturalWidth, img.naturalHeight]);
+      img.src = src;
+    }), captured[0]);
+    expect(size).toEqual([1600, 900]);
 
-    expect(dialogs).toEqual(['Failed to process photos. Please try again.']);
-    expect(await page.evaluate(() => window.uploadedImages.length)).toBe(0);
+    await page.locator('#cameraDoneBtn').click();
+    await expect(page.locator('#cameraModal')).toBeHidden();
 
-    // User removes the bad photo and taps Done again
-    await page.evaluate(() => { window.cameraState.capturedPhotos.pop(); });
-    await page.evaluate(() => processCapturedPhotos());
-
-    expect(await page.evaluate(() => window.uploadedImages.length)).toBe(1);
-  });
-
-  test('adds every photo when all succeed', async ({ page }) => {
-    await seedSession(page, ['good', 'good', 'good']);
-    await page.evaluate(() => processCapturedPhotos());
-
-    expect(await page.evaluate(() => window.uploadedImages.length)).toBe(3);
-    await expect(page.locator('.preview-item')).toHaveCount(3);
+    // Done adds the same data without re-encoding
+    expect(await page.evaluate(() => window.uploadedImages)).toEqual(captured);
+    expect(await page.evaluate(() => window.__encodeCount)).toBe(2);
+    await expect(page.locator('.preview-item')).toHaveCount(2);
   });
 });

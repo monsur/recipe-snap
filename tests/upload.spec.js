@@ -318,16 +318,34 @@ test.describe('Step 2: Upload - Image Handling', () => {
   });
 });
 
-test.describe('Image type sent to Gemini', () => {
-  async function uploadAndCaptureParts(page, fixture) {
+test.describe('Images sent to Gemini', () => {
+  test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.evaluate(() => {
       localStorage.clear();
       localStorage.setItem('geminiApiKey', 'key');
     });
     await page.reload();
+  });
 
-    await page.locator('#fileInput').setInputFiles(path.join(__dirname, 'fixtures', fixture));
+  // Makes a solid-colour JPEG of the given size, in the browser
+  async function makeJpeg(page, width, height) {
+    const base64 = await page.evaluate(([w, h]) => {
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#c33';
+      ctx.fillRect(0, 0, w, h);
+      return c.toDataURL('image/jpeg', 0.8).split(',')[1];
+    }, [width, height]);
+    return Buffer.from(base64, 'base64');
+  }
+
+  // Uploads one file, runs an extraction, and returns the image part sent
+  // to Gemini along with its decoded size
+  async function uploadAndCaptureImage(page, file) {
+    await page.locator('#fileInput').setInputFiles(file);
     await expect(page.locator('.preview-item')).toHaveCount(1);
 
     let parts = null;
@@ -341,21 +359,69 @@ test.describe('Image type sent to Gemini', () => {
     });
     await page.locator('#extractBtn').click();
     await expect.poll(() => parts).not.toBeNull();
-    return parts;
+
+    const { mimeType, data } = parts[0].inlineData;
+    const size = await page.evaluate(src => new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      img.src = src;
+    }), `data:${mimeType};base64,${data}`);
+    return { mimeType, data, ...size };
   }
 
-  test('a small PNG is sent labelled as PNG', async ({ page }) => {
-    const parts = await uploadAndCaptureParts(page, 'test-image-small.png');
-    expect(parts[0].inlineData.mimeType).toBe('image/png');
-    // Data really is a PNG (base64 of the PNG signature starts with iVBORw0KGgo)
-    expect(parts[0].inlineData.data.startsWith('iVBORw0KGgo')).toBe(true);
+  // Base64 of the JPEG signature (FF D8 FF) starts with /9j/
+  const isJpegData = data => data.startsWith('/9j/');
+
+  test('a JPEG that already fits is sent unchanged, byte for byte', async ({ page }) => {
+    const jpeg = await makeJpeg(page, 800, 600);
+    const sent = await uploadAndCaptureImage(page, { name: 'small.jpg', mimeType: 'image/jpeg', buffer: jpeg });
+
+    expect(sent.mimeType).toBe('image/jpeg');
+    expect(sent.data).toBe(jpeg.toString('base64'));
   });
 
-  test('a large PNG is resized to JPEG and labelled as JPEG', async ({ page }) => {
-    const parts = await uploadAndCaptureParts(page, 'test-image-large.png');
-    expect(parts[0].inlineData.mimeType).toBe('image/jpeg');
-    // Base64 of the JPEG signature (FF D8 FF) starts with /9j/
-    expect(parts[0].inlineData.data.startsWith('/9j/')).toBe(true);
+  test('a large JPEG is scaled to 1600px on its longest side', async ({ page }) => {
+    const jpeg = await makeJpeg(page, 3200, 2000);
+    const sent = await uploadAndCaptureImage(page, { name: 'big.jpg', mimeType: 'image/jpeg', buffer: jpeg });
+
+    expect(sent.mimeType).toBe('image/jpeg');
+    expect(isJpegData(sent.data)).toBe(true);
+    expect([sent.width, sent.height]).toEqual([1600, 1000]);
+  });
+
+  test('a small PNG is converted to JPEG without being enlarged', async ({ page }) => {
+    const sent = await uploadAndCaptureImage(page, path.join(__dirname, 'fixtures', 'test-image-small.png'));
+
+    expect(sent.mimeType).toBe('image/jpeg');
+    expect(isJpegData(sent.data)).toBe(true);
+    expect([sent.width, sent.height]).toEqual([100, 100]);
+  });
+
+  test('a large PNG is converted to JPEG and scaled to 1600px', async ({ page }) => {
+    const sent = await uploadAndCaptureImage(page, path.join(__dirname, 'fixtures', 'test-image-large.png'));
+
+    expect(sent.mimeType).toBe('image/jpeg');
+    expect(isJpegData(sent.data)).toBe(true);
+    expect([sent.width, sent.height]).toEqual([1600, 1600]);
+  });
+
+  test('every image is encoded at most once', async ({ page }) => {
+    await page.evaluate(() => {
+      window.__encodeCount = 0;
+      const original = HTMLCanvasElement.prototype.toDataURL;
+      HTMLCanvasElement.prototype.toDataURL = function (...args) {
+        window.__encodeCount++;
+        return original.apply(this, args);
+      };
+    });
+
+    await page.locator('#fileInput').setInputFiles([
+      path.join(__dirname, 'fixtures', 'test-image-small.png'),
+      path.join(__dirname, 'fixtures', 'test-image-large.png')
+    ]);
+    await expect(page.locator('.preview-item')).toHaveCount(2);
+
+    expect(await page.evaluate(() => window.__encodeCount)).toBe(2);
   });
 });
 
@@ -396,7 +462,7 @@ test.describe('File type handling', () => {
     expect(dialogs).toEqual([]);
   });
 
-  test('WebP files are accepted and sent as image/webp', async ({ page }) => {
+  test('WebP files are accepted and sent as JPEG', async ({ page }) => {
     await page.evaluate(() => localStorage.setItem('geminiApiKey', 'key'));
 
     await page.locator('#fileInput').setInputFiles({ name: 'photo.webp', mimeType: 'image/webp', buffer: WEBP_1PX });
@@ -413,18 +479,21 @@ test.describe('File type handling', () => {
     });
     await page.locator('#extractBtn').click();
     await expect.poll(() => parts).not.toBeNull();
-    expect(parts[0].inlineData.mimeType).toBe('image/webp');
+    expect(parts[0].inlineData.mimeType).toBe('image/jpeg');
   });
 });
 
 test.describe('HEIC conversion (library loaded on demand)', () => {
-  // Stand-in for the heic-to library: converts any input to a 10x10 JPEG
+  // Stand-in for the heic-to library: decodes any input to a 2400x1800
+  // bitmap, and records the options it was called with
   const FAKE_HEIC_LIBRARY = `
-    window.HeicTo = async () => {
+    window.__heicCalls = [];
+    window.HeicTo = async (options) => {
+      window.__heicCalls.push({ type: options.type });
       const c = document.createElement('canvas');
-      c.width = 10; c.height = 10;
-      c.getContext('2d').fillRect(0, 0, 10, 10);
-      return new Promise(resolve => c.toBlob(resolve, 'image/jpeg'));
+      c.width = 2400; c.height = 1800;
+      c.getContext('2d').fillRect(0, 0, 2400, 1800);
+      return createImageBitmap(c);
     };`;
   const heicFile = name => ({ name, mimeType: 'image/heic', buffer: Buffer.from('not really heic') });
 
@@ -448,6 +517,24 @@ test.describe('HEIC conversion (library loaded on demand)', () => {
     expect(libraryRequests).toBe(1);
     const types = await page.evaluate(() => window.uploadedImages.map(d => d.split(';')[0]));
     expect(types).toEqual(['data:image/jpeg', 'data:image/jpeg']);
+  });
+
+  test('decodes straight to a bitmap and encodes once, at 1600px', async ({ page }) => {
+    await page.route('**/heic-to@*/**', route =>
+      route.fulfill({ status: 200, contentType: 'application/javascript', body: FAKE_HEIC_LIBRARY }));
+
+    await page.locator('#fileInput').setInputFiles(heicFile('photo.heic'));
+    await expect(page.locator('.preview-item')).toHaveCount(1);
+
+    // Asked for a bitmap, not an intermediate JPEG
+    expect(await page.evaluate(() => window.__heicCalls)).toEqual([{ type: 'bitmap' }]);
+
+    const size = await page.evaluate(() => new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => resolve([img.naturalWidth, img.naturalHeight]);
+      img.src = window.uploadedImages[0];
+    }));
+    expect(size).toEqual([1600, 1200]);
   });
 
   test('reports a failed library download and retries on the next upload', async ({ page }) => {
