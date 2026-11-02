@@ -1588,7 +1588,26 @@
                 apiKey: '',
                 model: 'gemini-3.5-flash-lite',
                 source: '',
-                prompt: `Analyze the provided image(s) and extract the recipe. The images may be out of order.`
+                prompt: `Extract the recipe from these photos of a recipe (cookbook page, card, or screen).
+All the photos are parts of one single recipe. They may be out of order and may
+overlap; put the parts in the right order and combine them into one recipe
+without repeating anything.
+
+Rules:
+- Copy only what is written. Do not guess, add, or calculate anything that isn't
+  shown — leave a field empty instead (e.g. no estimated times or servings).
+- Keep the original wording, quantities, units, and language. Don't convert or
+  rephrase.
+- If a photo also shows part of a different recipe (for example the end of the
+  previous one on the same page), ignore it.
+- Ingredients: one per line, in the original order. Keep section headings such
+  as "For the sauce:" on their own line.
+- Directions: number each step ("1.", "2.", ...), with a blank line between steps.
+  Number the steps even if the original doesn't.
+- description: the introduction or headnote, if there is one.
+- notes: tips, variations, make-ahead or storage notes.
+- source: the book, website, or author name, if visible.
+- Times and servings: as written, e.g. "1 hour 15 minutes", "Serves 4".`
             },
             // Every image sent to Gemini is a JPEG no larger than this on its
             // longest side. Images are encoded at most once, at this quality.
@@ -1614,6 +1633,7 @@
                     'gemini-3.1-flash-lite-preview'
                 ],
                 prompt: [
+                    `Analyze the provided image(s) and extract the recipe. The images may be out of order.`,
                     `Analyze the provided image(s) and extract the the recipe into .paprikarecipe format. The images may be out of order.`,
                     `Analyze the provided image(s) and extract the recipe. The images may be out of order. Respond with a single valid JSON object only — no prose, no markdown, no code fences. The JSON should match the Paprika recipe format with fields like name, ingredients, directions, servings, prep_time, cook_time, notes, etc.`
                 ]
@@ -1898,7 +1918,7 @@
                             properties: {
                                 name:        { type: 'string' },
                                 ingredients: { type: 'string', description: 'One ingredient per line, e.g. "1 cup flour"' },
-                                directions:  { type: 'string', description: 'Each step on its own line' },
+                                directions:  { type: 'string', description: 'Numbered steps ("1.", "2.", ...), separated by a blank line' },
                                 servings:    { type: 'string' },
                                 prep_time:   { type: 'string' },
                                 cook_time:   { type: 'string' },

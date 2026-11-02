@@ -262,7 +262,11 @@ test.describe('Step 1: Setup - API Key Management', () => {
 test.describe('Settings defaults', () => {
   // Earlier defaults, including the shut-down 3.1 Flash-Lite preview
   const OLD_MODELS = ['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'];
-  const OLD_PROMPT = 'Analyze the provided image(s) and extract the the recipe into .paprikarecipe format. The images may be out of order.';
+  // Earlier default prompts
+  const OLD_PROMPTS = [
+    'Analyze the provided image(s) and extract the the recipe into .paprikarecipe format. The images may be out of order.',
+    'Analyze the provided image(s) and extract the recipe. The images may be out of order.'
+  ];
 
   // Mocks Gemini and returns a function that gives the last request's model and prompt
   async function captureGeminiRequest(page) {
@@ -298,26 +302,35 @@ test.describe('Settings defaults', () => {
     expect(stored).toEqual([null, null]);
   });
 
-  for (const oldModel of OLD_MODELS) {
-  test(`a stale saved default (${oldModel}) and prompt are replaced by the current defaults`, async ({ page }) => {
-    await page.evaluate(([m, p]) => {
-      localStorage.setItem('geminiApiKey', 'key');
-      localStorage.setItem('model', m);
-      localStorage.setItem('prompt', p);
-    }, [oldModel, OLD_PROMPT]);
-    await page.reload();
+  // Each earlier default model, paired with an earlier default prompt
+  OLD_MODELS.forEach((oldModel, i) => {
+    const oldPrompt = OLD_PROMPTS[i];
+    test(`a stale saved default (${oldModel}, old prompt ${i + 1}) is replaced by the current defaults`, async ({ page }) => {
+      await page.evaluate(([m, p]) => {
+        localStorage.setItem('geminiApiKey', 'key');
+        localStorage.setItem('model', m);
+        localStorage.setItem('prompt', p);
+      }, [oldModel, oldPrompt]);
+      await page.reload();
 
-    const defaults = await page.evaluate(() => CONFIG.defaults);
-    await expect(page.locator('#model')).toHaveValue(defaults.model);
-    await expect(page.locator('#prompt')).toHaveValue(defaults.prompt);
-    expect(await page.evaluate(() => [localStorage.getItem('model'), localStorage.getItem('prompt')])).toEqual([null, null]);
+      const defaults = await page.evaluate(() => CONFIG.defaults);
+      await expect(page.locator('#model')).toHaveValue(defaults.model);
+      await expect(page.locator('#prompt')).toHaveValue(defaults.prompt);
+      expect(await page.evaluate(() => [localStorage.getItem('model'), localStorage.getItem('prompt')])).toEqual([null, null]);
 
-    const seen = await captureGeminiRequest(page);
-    await extract(page);
-    expect(seen.model).toBe(defaults.model);
-    expect(seen.prompt).toBe(defaults.prompt);
+      const seen = await captureGeminiRequest(page);
+      await extract(page);
+      expect(seen.model).toBe(defaults.model);
+      expect(seen.prompt).toBe(defaults.prompt);
+    });
   });
-  }
+
+  test('the default prompt asks for numbered steps from one recipe across all photos', async ({ page }) => {
+    const prompt = await page.evaluate(() => CONFIG.defaults.prompt);
+    expect(prompt).toContain('All the photos are parts of one single recipe');
+    expect(prompt).toContain('out of order');
+    expect(prompt).toContain('number each step');
+  });
 
   test('a custom model and prompt are kept and used', async ({ page }) => {
     await page.locator('#apiKey').fill('key');
