@@ -654,3 +654,31 @@ test.describe('Request timeout', () => {
     await expect.poll(() => page.evaluate(() => window.extractedRecipe?.name)).toBe('On Time');
   });
 });
+
+test.describe('API key handling', () => {
+  test('sends the API key in a header, not the URL', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem('geminiApiKey', 'secret-key-123');
+    });
+    await page.reload();
+    await page.evaluate(() => { window.uploadedImages = ['data:image/jpeg;base64,test']; });
+
+    let request = null;
+    await page.route('**/generativelanguage.googleapis.com/**', async route => {
+      request = route.request();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"name":"R","ingredients":"i","directions":"d"}' }] } }] })
+      });
+    });
+    await page.locator('#extractBtn').click();
+    await expect.poll(() => request).not.toBeNull();
+
+    expect(request.url()).not.toContain('secret-key-123');
+    expect(request.url()).not.toContain('key=');
+    expect(request.headers()['x-goog-api-key']).toBe('secret-key-123');
+  });
+});

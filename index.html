@@ -1749,7 +1749,7 @@
          * Sends one request to Gemini and returns the parsed recipe object.
          * Throws RetryableError for failures worth another attempt.
          */
-        async function requestRecipe(apiUrl, requestBody) {
+        async function requestRecipe(apiUrl, apiKey, requestBody) {
             // Abort if Gemini hasn't fully responded within CONFIG.timeoutMs
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), CONFIG.timeoutMs);
@@ -1759,7 +1759,10 @@
                 response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        // In a header rather than the URL, so it stays out of
+                        // browser history, proxy logs, and error reports
+                        'x-goog-api-key': apiKey
                     },
                     body: JSON.stringify(requestBody),
                     signal: controller.signal
@@ -1898,8 +1901,8 @@
 
                 // 7. Call Gemini API, retrying temporary failures
                 console.log(`Sending ${imageParts.length} image(s) to Gemini API...`);
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-                const recipeJson = await withRetry(() => requestRecipe(apiUrl, requestBody));
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+                const recipeJson = await withRetry(() => requestRecipe(apiUrl, apiKey, requestBody));
 
                 // The schema guarantees the fields exist, not that they have content.
                 // Blurry photos or non-recipe images come back empty.
