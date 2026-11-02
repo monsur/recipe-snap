@@ -1579,6 +1579,36 @@
         };
 
         /**
+         * Returns a user-facing message if Gemini blocked the request or stopped
+         * generating early (finishReason other than STOP), otherwise null.
+         */
+        function getGeminiBlockedMessage(data) {
+            const blockReason = data.promptFeedback?.blockReason;
+            if (blockReason) {
+                return `Gemini blocked this request (${blockReason}). Try different photos.`;
+            }
+
+            const finishReason = data.candidates?.[0]?.finishReason;
+            if (!finishReason || finishReason === 'STOP') {
+                return null;
+            }
+
+            switch (finishReason) {
+                case 'MAX_TOKENS':
+                    return 'The recipe was too long and Gemini\'s response was cut off. Try fewer photos at a time.';
+                case 'RECITATION':
+                    return 'Gemini declined to transcribe this recipe because it closely matches published text (such as a cookbook). Try photographing a smaller section, or enter the recipe manually.';
+                case 'SAFETY':
+                case 'PROHIBITED_CONTENT':
+                case 'BLOCKLIST':
+                case 'SPII':
+                    return `Gemini's safety filters blocked this response (${finishReason}). Try different photos.`;
+                default:
+                    return `Gemini stopped before finishing (${finishReason}). Please try again.`;
+            }
+        }
+
+        /**
          * Extracts recipe from uploaded images using Gemini API
          */
         async function extractRecipe() {
@@ -1670,6 +1700,12 @@
 
                 const data = await response.json();
                 console.log('Received response from API');
+
+                // Surface blocked or truncated responses with a specific message
+                const blockedMessage = getGeminiBlockedMessage(data);
+                if (blockedMessage) {
+                    throw new Error(blockedMessage);
+                }
 
                 // Extract text from response
                 const text = data.candidates?.[0]?.content?.parts?.[0]?.text;

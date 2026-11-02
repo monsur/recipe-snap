@@ -422,4 +422,58 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
 
     expect(alertMessage.toLowerCase()).toContain('failed');
   });
+  // Helper: mock a Gemini response body and return the alert message shown
+  async function extractWithResponse(page, body) {
+    await page.route('**/generativelanguage.googleapis.com/**', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    });
+
+    let alertMessage = '';
+    page.on('dialog', async dialog => {
+      alertMessage = dialog.message();
+      await dialog.accept();
+    });
+
+    await page.evaluate(() => { window.uploadedImages = ['data:image/jpeg;base64,test']; });
+    await page.locator('#step2 .step-header').click();
+    await page.locator('#extractBtn').click();
+    await page.waitForTimeout(1000);
+    return alertMessage;
+  }
+
+  test('should explain RECITATION finish reason', async ({ page }) => {
+    const msg = await extractWithResponse(page, {
+      candidates: [{ finishReason: 'RECITATION', content: { parts: [] } }]
+    });
+    expect(msg).toContain('published text');
+  });
+
+  test('should explain MAX_TOKENS truncation instead of a parse error', async ({ page }) => {
+    const msg = await extractWithResponse(page, {
+      candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: '{"name": "Soup", "ingredients": "1 cup wat' }] } }]
+    });
+    expect(msg).toContain('cut off');
+  });
+
+  test('should explain SAFETY finish reason', async ({ page }) => {
+    const msg = await extractWithResponse(page, {
+      candidates: [{ finishReason: 'SAFETY' }]
+    });
+    expect(msg).toContain('safety filters');
+  });
+
+  test('should explain a blocked prompt', async ({ page }) => {
+    const msg = await extractWithResponse(page, {
+      promptFeedback: { blockReason: 'OTHER' }
+    });
+    expect(msg).toContain('blocked this request');
+  });
+
+  test('should accept a normal STOP response', async ({ page }) => {
+    const msg = await extractWithResponse(page, {
+      candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify({ name: 'Soup', ingredients: 'Water', directions: 'Boil' }) }] } }]
+    });
+    expect(msg).toBe('');
+    expect(await page.evaluate(() => window.extractedRecipe?.name)).toBe('Soup');
+  });
 });
