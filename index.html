@@ -1175,7 +1175,8 @@
             stream: null,
             facingMode: 'environment', // 'user' for front, 'environment' for back
             capturedPhotos: [], // Photos captured in current session
-            hasMultipleCameras: false
+            hasMultipleCameras: false,
+            session: 0 // Incremented on every open/close, to detect stale camera requests
         };
 
         // Global state for extracted recipe
@@ -1200,6 +1201,10 @@
                 <span>Opening Camera...</span>
             `;
             takePhotoBtn.disabled = true;
+
+            // Start a new session; closeCamera() bumps this, so a request
+            // that resolves after the modal was closed can be detected.
+            const session = ++window.cameraState.session;
 
             try {
                 // Check if mediaDevices API is supported
@@ -1226,11 +1231,22 @@
                 };
 
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+                // Camera was closed while we waited: release it instead of attaching it
+                if (session !== window.cameraState.session) {
+                    stream.getTracks().forEach(track => track.stop());
+                    console.log('Camera closed before it started; released stream');
+                    return;
+                }
+
                 window.cameraState.stream = stream;
                 video.srcObject = stream;
 
                 // Detect if device has multiple cameras (for camera switch button)
                 const devices = await navigator.mediaDevices.enumerateDevices();
+                if (session !== window.cameraState.session) {
+                    return; // closed during device detection; closeCamera() released the stream
+                }
                 const videoDevices = devices.filter(device => device.kind === 'videoinput');
                 window.cameraState.hasMultipleCameras = videoDevices.length > 1;
 
@@ -1241,16 +1257,13 @@
 
                 console.log(`Camera opened successfully. Resolution: ${stream.getVideoTracks()[0].getSettings().width}x${stream.getVideoTracks()[0].getSettings().height}`);
 
-                // Restore button state
-                takePhotoBtn.innerHTML = originalContent;
-                takePhotoBtn.disabled = false;
-
             } catch (error) {
                 console.error('Camera access error:', error);
 
-                // Restore button state
-                takePhotoBtn.innerHTML = originalContent;
-                takePhotoBtn.disabled = false;
+                // Camera was closed while we waited: don't reopen it to show an error
+                if (session !== window.cameraState.session) {
+                    return;
+                }
 
                 // Show error in modal
                 modal.style.display = 'flex';
@@ -1266,6 +1279,10 @@
                 } else {
                     errorMessage.textContent = error.message || 'Unable to access camera. Please check your browser settings and try again.';
                 }
+            } finally {
+                // Restore button state
+                takePhotoBtn.innerHTML = originalContent;
+                takePhotoBtn.disabled = false;
             }
         }
 
@@ -1277,6 +1294,9 @@
             const modal = document.getElementById('cameraModal');
             const video = document.getElementById('cameraVideo');
             const switchBtn = document.getElementById('cameraSwitchBtn');
+
+            // Invalidate any camera request still in flight
+            window.cameraState.session++;
 
             // Stop all video tracks to release camera
             if (window.cameraState.stream) {

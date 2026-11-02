@@ -211,3 +211,80 @@ test.describe('Take Photo Camera Feature', () => {
     expect(await page.evaluate(() => window.uploadedImages.length)).toBe(1);
   });
 });
+
+test.describe('Closing the camera while it is starting', () => {
+  test.beforeEach(async ({ page }) => {
+    // Slow fake camera: each getUserMedia call resolves (or rejects) after
+    // window.__gumDelay ms. Every stream handed out is kept in window.__streams.
+    await page.addInitScript(() => {
+      window.__gumDelay = 800;
+      window.__gumError = null;
+      window.__streams = [];
+      MediaDevices.prototype.getUserMedia = () => new Promise((resolve, reject) => {
+        setTimeout(() => {
+          if (window.__gumError) {
+            const err = new Error(window.__gumError);
+            err.name = 'NotAllowedError';
+            reject(err);
+            return;
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = 64;
+          canvas.height = 48;
+          canvas.getContext('2d').fillRect(0, 0, 64, 48);
+          const stream = canvas.captureStream(10);
+          window.__streams.push(stream);
+          resolve(stream);
+        }, window.__gumDelay);
+      });
+      MediaDevices.prototype.enumerateDevices = async () => [{ kind: 'videoinput', deviceId: 'a', label: 'A' }];
+    });
+    await page.goto('/');
+    await page.locator('#step2 .step-header').click();
+  });
+
+  const trackStates = page => page.evaluate(() => window.__streams.map(s => s.getVideoTracks()[0].readyState));
+
+  test('releases the camera if closed before it started', async ({ page }) => {
+    await page.locator('#takePhotoBtn').click();
+    await expect(page.locator('#cameraModal')).toBeVisible();
+    await page.locator('.camera-modal-close').click();
+
+    // Let the slow request finish
+    await expect.poll(() => page.evaluate(() => window.__streams.length)).toBe(1);
+
+    expect(await trackStates(page)).toEqual(['ended']);
+    expect(await page.evaluate(() => document.getElementById('cameraVideo').srcObject)).toBeNull();
+    expect(await page.evaluate(() => window.cameraState.stream)).toBeNull();
+    await expect(page.locator('#cameraModal')).toBeHidden();
+    await expect(page.locator('#takePhotoBtn')).toBeEnabled();
+    await expect(page.locator('#takePhotoBtn')).toContainText('Take Photo');
+  });
+
+  test('does not reopen to show an error if closed before the camera failed', async ({ page }) => {
+    await page.evaluate(() => { window.__gumError = 'denied'; });
+    await page.locator('#takePhotoBtn').click();
+    await page.locator('.camera-modal-close').click();
+
+    await page.waitForTimeout(1200);
+    await expect(page.locator('#cameraModal')).toBeHidden();
+    await expect(page.locator('#takePhotoBtn')).toBeEnabled();
+  });
+
+  test('reopening quickly uses the new stream and releases the stale one', async ({ page }) => {
+    await page.locator('#takePhotoBtn').click();
+    await page.locator('.camera-modal-close').click();
+
+    // Second open resolves after the first
+    await page.evaluate(() => { window.__gumDelay = 1200; });
+    await page.locator('#takePhotoBtn').click();
+
+    await expect.poll(() => page.evaluate(() => window.__streams.length), { timeout: 5000 }).toBe(2);
+    await expect.poll(() => page.evaluate(() => !!window.cameraState.stream)).toBe(true);
+
+    expect(await trackStates(page)).toEqual(['ended', 'live']);
+    const attached = await page.evaluate(() => document.getElementById('cameraVideo').srcObject === window.__streams[1]);
+    expect(attached).toBe(true);
+    await expect(page.locator('#cameraModal')).toBeVisible();
+  });
+});
