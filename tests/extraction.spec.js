@@ -703,3 +703,60 @@ test.describe('API key handling', () => {
     expect(request.headers()['x-goog-api-key']).toBe('secret-key-123');
   });
 });
+
+test.describe('Error messages', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem('geminiApiKey', 'key');
+    });
+    await page.reload();
+    await fastRetries(page);
+    await page.evaluate(() => { window.uploadedImages = ['data:image/jpeg;base64,test']; });
+  });
+
+  async function alertForApiError(page, status, error) {
+    const dialogs = [];
+    page.on('dialog', async d => { dialogs.push(d.message()); await d.accept(); });
+    await page.route('**/generativelanguage.googleapis.com/**', route => route.fulfill({
+      status, contentType: 'application/json', body: JSON.stringify({ error })
+    }));
+    await page.locator('#extractBtn').click();
+    await expect.poll(() => dialogs.length).toBe(1);
+    return dialogs[0];
+  }
+
+  test('an invalid API key gets the API key hint, from the error reason', async ({ page }) => {
+    const msg = await alertForApiError(page, 400, {
+      message: 'API key not valid. Please pass a valid API key.',
+      status: 'INVALID_ARGUMENT',
+      details: [{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason: 'API_KEY_INVALID' }]
+    });
+    expect(msg).toBe('Failed to extract recipe. Please check your API key is valid. (API key not valid. Please pass a valid API key.)');
+  });
+
+  test('a 403 gets the API key hint', async ({ page }) => {
+    const msg = await alertForApiError(page, 403, { message: 'Permission denied', status: 'PERMISSION_DENIED' });
+    expect(msg).toContain('Please check your API key is valid. (Permission denied)');
+  });
+
+  test('a 429 gets the rate limit hint and keeps the details', async ({ page }) => {
+    const msg = await alertForApiError(page, 429, { message: 'Resource has been exhausted (e.g. check quota).', status: 'RESOURCE_EXHAUSTED' });
+    expect(msg).toContain("rate limit or quota was reached");
+    expect(msg).toContain('(Resource has been exhausted (e.g. check quota).)');
+  });
+
+  test('other API errors are shown as Gemini wrote them, even if they mention "parse" or "API key"', async ({ page }) => {
+    const msg = await alertForApiError(page, 400, {
+      message: 'Unable to parse image data. API key usage is fine.',
+      status: 'INVALID_ARGUMENT'
+    });
+    expect(msg).toBe('Failed to extract recipe. Unable to parse image data. API key usage is fine.');
+  });
+
+  test('an invalid model name shows the API message', async ({ page }) => {
+    const msg = await alertForApiError(page, 404, { message: 'models/nope is not found for API version v1beta', status: 'NOT_FOUND' });
+    expect(msg).toBe('Failed to extract recipe. models/nope is not found for API version v1beta');
+  });
+});

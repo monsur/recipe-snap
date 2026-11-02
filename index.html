@@ -1709,7 +1709,25 @@
          * Error for failures worth retrying (network errors, rate limits,
          * server errors, malformed responses).
          */
-        class RetryableError extends Error {}
+        class RetryableError extends Error {
+            constructor(message) {
+                super(message);
+                this.retryable = true;
+            }
+        }
+
+        /**
+         * Error response from the Gemini API, with its HTTP status and, when
+         * given, the machine-readable reason (e.g. API_KEY_INVALID).
+         */
+        class GeminiApiError extends Error {
+            constructor(message, status, reason) {
+                super(message);
+                this.status = status;
+                this.reason = reason;
+                this.retryable = RETRYABLE_STATUSES.includes(status);
+            }
+        }
 
         // HTTP statuses that usually succeed on a later attempt
         const RETRYABLE_STATUSES = [429, 500, 502, 503, 504];
@@ -1724,7 +1742,7 @@
                 try {
                     return await fn();
                 } catch (error) {
-                    if (!(error instanceof RetryableError) || attempt >= attempts) {
+                    if (!error.retryable || attempt >= attempts) {
                         throw error;
                     }
                     const delay = baseDelayMs * 2 ** (attempt - 1);
@@ -1772,7 +1790,8 @@
 
             if (!response.ok) {
                 const message = data.error?.message || `API request failed with status ${response.status}`;
-                throw RETRYABLE_STATUSES.includes(response.status) ? new RetryableError(message) : new Error(message);
+                const reason = data.error?.details?.find(detail => detail.reason)?.reason;
+                throw new GeminiApiError(message, response.status, reason);
             }
 
             if (!data) {
@@ -1794,7 +1813,7 @@
                 .map(part => part.text)
                 .join('');
             if (!text) {
-                throw new Error('No text content in API response');
+                throw new Error('Gemini returned an empty response. Please try again.');
             }
 
             // 8. Parse JSON from response
@@ -1802,8 +1821,26 @@
                 return JSON.parse(text);
             } catch (parseError) {
                 console.error('Failed to parse JSON:', parseError);
-                throw new RetryableError('Failed to parse recipe data from API response. Please try again.');
+                throw new RetryableError("Gemini's reply wasn't valid recipe data. Please try again.");
             }
+        }
+
+        /**
+         * Turns an extraction error into the text shown to the user. API errors
+         * get a hint based on their status/reason (not by searching the message
+         * text), plus Gemini's own message; other errors are already written
+         * for the user.
+         */
+        function describeExtractionError(error) {
+            if (error instanceof GeminiApiError) {
+                if (error.reason === 'API_KEY_INVALID' || error.status === 401 || error.status === 403) {
+                    return `Please check your API key is valid. (${error.message})`;
+                }
+                if (error.status === 429) {
+                    return `Gemini's rate limit or quota was reached. Please wait a minute and try again. (${error.message})`;
+                }
+            }
+            return error.message || 'Please try again.';
         }
 
         /**
@@ -1940,19 +1977,7 @@
                 extractBtn.innerHTML = originalContent;
                 extractBtn.disabled = false;
 
-                // Show user-friendly error message
-                let errorMessage = 'Failed to extract recipe. ';
-                if (error.message && error.message.includes('API key')) {
-                    errorMessage += 'Please check your API key is valid.';
-                } else if (error.message && error.message.includes('parse')) {
-                    errorMessage += 'The API response was not in the expected format.';
-                } else if (error.message && error.message.includes('quota')) {
-                    errorMessage += 'API quota exceeded. Please try again later.';
-                } else {
-                    errorMessage += error.message || 'Please try again.';
-                }
-
-                alert(errorMessage);
+                alert('Failed to extract recipe. ' + describeExtractionError(error));
             }
         }
 
