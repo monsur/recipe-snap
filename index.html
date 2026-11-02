@@ -1660,6 +1660,18 @@
         }
 
         /**
+         * Returns true if the parsed response is a recipe object with
+         * ingredients or directions.
+         */
+        function hasRecipeContent(recipe) {
+            if (!recipe || typeof recipe !== 'object' || Array.isArray(recipe)) {
+                return false;
+            }
+            const hasText = value => String(value ?? '').trim().length > 0;
+            return hasText(recipe.ingredients) || hasText(recipe.directions);
+        }
+
+        /**
          * Extracts recipe from uploaded images using Gemini API
          */
         async function extractRecipe() {
@@ -1773,6 +1785,12 @@
                 } catch (parseError) {
                     console.error('Failed to parse JSON:', parseError);
                     throw new Error('Failed to parse recipe data from API response. Please try again.');
+                }
+
+                // The schema guarantees the fields exist, not that they have content.
+                // Blurry photos or non-recipe images come back empty.
+                if (!hasRecipeContent(recipeJson)) {
+                    throw new Error('No recipe was found in these photos. Make sure the ingredients and directions are visible and in focus, then try again.');
                 }
 
                 // Inject source from user settings

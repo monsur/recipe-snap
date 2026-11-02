@@ -476,4 +476,34 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
     expect(msg).toBe('');
     expect(await page.evaluate(() => window.extractedRecipe?.name)).toBe('Soup');
   });
+  test('should explain when the response has no recipe content', async ({ page }) => {
+    const msg = await extractWithResponse(page, {
+      candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify({ name: '', ingredients: '', directions: '' }) }] } }]
+    });
+    expect(msg).toContain('No recipe was found');
+    expect(await page.evaluate(() => window.extractedRecipe)).toBeFalsy();
+    await expect(page.locator('#recipeEditor')).toHaveValue('');
+  });
+
+  test('should treat whitespace-only fields as empty', async ({ page }) => {
+    const msg = await extractWithResponse(page, {
+      candidates: [{ content: { parts: [{ text: JSON.stringify({ name: 'Untitled', ingredients: '  \n ', directions: ' ' }) }] } }]
+    });
+    expect(msg).toContain('No recipe was found');
+  });
+
+  test('should reject a response that is not a recipe object', async ({ page }) => {
+    const msg = await extractWithResponse(page, {
+      candidates: [{ content: { parts: [{ text: 'null' }] } }]
+    });
+    expect(msg).toContain('No recipe was found');
+  });
+
+  test('should accept a recipe without a name', async ({ page }) => {
+    const msg = await extractWithResponse(page, {
+      candidates: [{ content: { parts: [{ text: JSON.stringify({ name: '', ingredients: '1 egg', directions: 'Boil' }) }] } }]
+    });
+    expect(msg).toBe('');
+    expect(await page.evaluate(() => window.extractedRecipe?.ingredients)).toBe('1 egg');
+  });
 });
