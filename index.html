@@ -1691,13 +1691,15 @@
 
             try {
                 // 5. Prepare image parts for API
-                const imageParts = window.uploadedImages.map(base64Data => {
-                    // Extract base64 data (remove data:image/...;base64, prefix)
-                    const base64Content = base64Data.split(',')[1];
+                const imageParts = window.uploadedImages.map(dataUrl => {
+                    // Split "data:image/png;base64,<data>" into its type and data.
+                    // Small images skip re-encoding, so they may be PNG, not JPEG.
+                    const [header, base64Content] = dataUrl.split(',');
+                    const mimeType = header.match(/^data:([^;]+)/)?.[1] || 'image/jpeg';
                     return {
                         inlineData: {
                             data: base64Content,
-                            mimeType: 'image/jpeg'
+                            mimeType
                         }
                     };
                 });

@@ -356,3 +356,44 @@ test.describe('Step 2: Upload - Image Handling', () => {
     expect(imageCount).toBe(1);
   });
 });
+
+test.describe('Image type sent to Gemini', () => {
+  async function uploadAndCaptureParts(page, fixture) {
+    await page.goto('/');
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem('geminiApiKey', 'key');
+    });
+    await page.reload();
+
+    await page.locator('#fileInput').setInputFiles(path.join(__dirname, 'fixtures', fixture));
+    await expect(page.locator('.preview-item')).toHaveCount(1);
+
+    let parts = null;
+    await page.route('**/generativelanguage.googleapis.com/**', async route => {
+      parts = route.request().postDataJSON().contents[0].parts.filter(p => p.inlineData);
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"name":"R","ingredients":"i","directions":"d"}' }] } }] })
+      });
+    });
+    await page.locator('#extractBtn').click();
+    await expect.poll(() => parts).not.toBeNull();
+    return parts;
+  }
+
+  test('a small PNG is sent labelled as PNG', async ({ page }) => {
+    const parts = await uploadAndCaptureParts(page, 'test-image-small.png');
+    expect(parts[0].inlineData.mimeType).toBe('image/png');
+    // Data really is a PNG (base64 of the PNG signature starts with iVBORw0KGgo)
+    expect(parts[0].inlineData.data.startsWith('iVBORw0KGgo')).toBe(true);
+  });
+
+  test('a large PNG is resized to JPEG and labelled as JPEG', async ({ page }) => {
+    const parts = await uploadAndCaptureParts(page, 'test-image-large.png');
+    expect(parts[0].inlineData.mimeType).toBe('image/jpeg');
+    // Base64 of the JPEG signature (FF D8 FF) starts with /9j/
+    expect(parts[0].inlineData.data.startsWith('/9j/')).toBe(true);
+  });
+});
