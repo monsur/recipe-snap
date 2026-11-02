@@ -1970,12 +1970,13 @@
          * @returns {boolean} - True if valid image type
          */
         function validateFileType(file) {
-            const validExtensions = ['jpg', 'jpeg', 'png', 'heic'];
+            // Formats Gemini accepts (HEIC/HEIF are converted to JPEG first)
+            const validExtensions = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'];
             const fileName = file.name.toLowerCase();
             const extension = fileName.split('.').pop();
 
             if (!validExtensions.includes(extension)) {
-                console.log(`Invalid file type: ${fileName}. Supported: JPG, PNG, HEIC`);
+                console.log(`Invalid file type: ${fileName}. Supported: JPG, PNG, WebP, HEIC`);
                 return false;
             }
 
@@ -2107,12 +2108,12 @@
             try {
                 // Validate file type
                 if (!validateFileType(file)) {
-                    throw new Error(`Invalid file type: ${file.name}`);
+                    throw new Error('unsupported file type');
                 }
 
                 // Convert HEIC to JPEG if needed
                 let imageBlob = file;
-                const isHeic = file.name.toLowerCase().endsWith('.heic');
+                const isHeic = /\.hei[cf]$/i.test(file.name);
                 if (isHeic) {
                     imageBlob = await convertHeicToJpeg(file);
                 }
@@ -2188,6 +2189,24 @@
         }
 
         /**
+         * Builds the alert shown when some uploaded files were skipped
+         * @param {Array<{name: string, message: string}>} errors
+         * @returns {string}
+         */
+        function formatUploadErrors(errors) {
+            const lines = errors.map(e => `• ${e.name}: ${e.message}`);
+            let message = `${errors.length} file(s) could not be added:\n\n${lines.join('\n')}`;
+
+            if (errors.some(e => e.message === 'unsupported file type')) {
+                message += '\n\nSupported formats: JPG, PNG, WebP, HEIC.';
+            }
+            if (errors.some(e => /HEIC/i.test(e.message))) {
+                message += '\n\nHEIC support varies by browser. Converting to JPG or PNG, or using Safari, usually helps.';
+            }
+            return message;
+        }
+
+        /**
          * Main handler for file upload events
          * @param {Event} event - Change event from file input
          */
@@ -2219,7 +2238,7 @@
                     console.log(`Successfully processed: ${file.name}`);
                 } catch (error) {
                     console.log(`Skipping ${file.name}: ${error.message}`);
-                    errors.push(`${file.name}: ${error.message}`);
+                    errors.push({ name: file.name, message: error.message });
                 }
             }
 
@@ -2239,11 +2258,8 @@
             // Log summary
             if (errors.length > 0) {
                 console.log(`Upload complete with errors. Processed: ${processedImages.length}, Failed: ${errors.length}`);
-                console.log('Errors:', errors.join('\n'));
-                // Show user-friendly message for HEIC errors
-                if (errors.some(e => e.includes('HEIC') || e.includes('not supported'))) {
-                    alert('Some HEIC files could not be converted. HEIC format has limited browser support.\n\nPlease convert your HEIC files to JPG or PNG before uploading, or try using Safari browser which has better HEIC support.');
-                }
+                console.log('Errors:', errors.map(e => `${e.name}: ${e.message}`).join('\n'));
+                alert(formatUploadErrors(errors));
             } else {
                 console.log(`Upload complete. Total images: ${window.uploadedImages.length}`);
             }

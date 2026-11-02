@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const path = require('path');
+const fs = require('fs');
 
 test.describe('Step 2: Upload - Image Handling', () => {
   test.beforeEach(async ({ page }) => {
@@ -395,5 +396,63 @@ test.describe('Image type sent to Gemini', () => {
     expect(parts[0].inlineData.mimeType).toBe('image/jpeg');
     // Base64 of the JPEG signature (FF D8 FF) starts with /9j/
     expect(parts[0].inlineData.data.startsWith('/9j/')).toBe(true);
+  });
+});
+
+test.describe('File type handling', () => {
+  // 1x1 WebP and GIF images
+  const WEBP_1PX = Buffer.from('UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=', 'base64');
+  const GIF_1PX = Buffer.from('R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==', 'base64');
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#step2 .step-header').click();
+  });
+
+  test('unsupported files are reported, supported ones in the batch are still added', async ({ page }) => {
+    const dialogs = [];
+    page.on('dialog', async d => { dialogs.push(d.message()); await d.accept(); });
+
+    await page.locator('#fileInput').setInputFiles([
+      { name: 'test-image-small.png', mimeType: 'image/png', buffer: fs.readFileSync(path.join(__dirname, 'fixtures/test-image-small.png')) },
+      { name: 'animation.gif', mimeType: 'image/gif', buffer: GIF_1PX }
+    ]);
+
+    await expect(page.locator('.preview-item')).toHaveCount(1);
+    await expect.poll(() => dialogs.length).toBe(1);
+    expect(dialogs[0]).toContain('animation.gif');
+    expect(dialogs[0]).toContain('unsupported file type');
+    expect(dialogs[0]).toContain('Supported formats: JPG, PNG, WebP, HEIC');
+    expect(dialogs[0]).not.toContain('test-image-small.png');
+  });
+
+  test('no alert when every file is supported', async ({ page }) => {
+    const dialogs = [];
+    page.on('dialog', async d => { dialogs.push(d.message()); await d.accept(); });
+
+    await page.locator('#fileInput').setInputFiles(path.join(__dirname, 'fixtures/test-image-small.png'));
+    await expect(page.locator('.preview-item')).toHaveCount(1);
+    await page.waitForTimeout(200);
+    expect(dialogs).toEqual([]);
+  });
+
+  test('WebP files are accepted and sent as image/webp', async ({ page }) => {
+    await page.evaluate(() => localStorage.setItem('geminiApiKey', 'key'));
+
+    await page.locator('#fileInput').setInputFiles({ name: 'photo.webp', mimeType: 'image/webp', buffer: WEBP_1PX });
+    await expect(page.locator('.preview-item')).toHaveCount(1);
+
+    let parts = null;
+    await page.route('**/generativelanguage.googleapis.com/**', async route => {
+      parts = route.request().postDataJSON().contents[0].parts.filter(p => p.inlineData);
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"name":"R","ingredients":"i","directions":"d"}' }] } }] })
+      });
+    });
+    await page.locator('#extractBtn').click();
+    await expect.poll(() => parts).not.toBeNull();
+    expect(parts[0].inlineData.mimeType).toBe('image/webp');
   });
 });
