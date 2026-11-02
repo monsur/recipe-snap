@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
+const { expandStep, stubClipboard, readStubClipboard } = require('./helpers');
 
 test.describe('Step 3: Download - Recipe Export', () => {
   test.beforeEach(async ({ page }) => {
@@ -36,17 +37,14 @@ test.describe('Step 3: Download - Recipe Export', () => {
   });
 
   test('should populate editor with extracted recipe JSON', async ({ page }) => {
-    // Trigger display of recipe in editor
-    await page.evaluate(() => {
-      if (window.displayRecipeInEditor) {
-        window.displayRecipeInEditor();
-      }
-    });
+    await page.evaluate(() => displayRecipeInEditor(window.extractedRecipe));
 
-    const editorContent = await page.locator('#step3 textarea').inputValue();
-
-    // Should contain JSON or be empty if not yet implemented
-    expect(typeof editorContent).toBe('string');
+    const editorContent = await page.locator('#recipeEditor').inputValue();
+    const parsed = JSON.parse(editorContent);
+    expect(parsed.name).toBe('Test Lasagna');
+    expect(parsed.servings).toBe('8');
+    // Pretty-printed with 2-space indentation
+    expect(editorContent).toContain('\n  "name": "Test Lasagna"');
   });
 
   test('should format JSON with proper indentation', async ({ page }) => {
@@ -133,62 +131,32 @@ test.describe('Step 3: Download - Recipe Export', () => {
   });
 
   test('should copy JSON to clipboard', async ({ page }) => {
-    const testRecipe = { name: 'Clipboard Test', ingredients: 'test' };
+    await stubClipboard(page);
+    const json = JSON.stringify({ name: 'Clipboard Test', ingredients: 'test' });
 
-    await page.evaluate((r) => {
-      window.extractedRecipe = r;
-      const editor = document.querySelector('#step3 textarea');
-      if (editor) {
-        editor.value = JSON.stringify(r);
-      }
-    }, testRecipe);
+    await page.evaluate((text) => {
+      document.getElementById('recipeEditor').value = text;
+    }, json);
 
-    // Grant clipboard permissions
-    await page.context().grantPermissions(['clipboard-write', 'clipboard-read']);
+    await expandStep(page, 'step3');
+    await page.locator('#step3 .btn-secondary').filter({ hasText: 'Copy to Clipboard' }).click();
 
-    // Expand step 3
-    await page.locator('#step3 .step-header').click();
-
-    const copyBtn = page.locator('#step3 .btn-secondary').filter({ hasText: 'Copy to Clipboard' });
-    await copyBtn.click();
-
-    // Wait a bit for clipboard operation
-    await page.waitForTimeout(500);
-
-    // Try to read clipboard
-    const clipboardContent = await page.evaluate(() => {
-      return navigator.clipboard.readText().catch(() => '');
-    });
-
-    // Should either have the content or be empty if not implemented
-    expect(typeof clipboardContent).toBe('string');
+    await expect.poll(() => readStubClipboard(page)).toBe(json);
   });
 
   test('should show success message after copy', async ({ page }) => {
-    await page.context().grantPermissions(['clipboard-write']);
-
-    let alertShown = false;
-    page.on('dialog', async dialog => {
-      alertShown = true;
-      await dialog.accept();
+    await stubClipboard(page);
+    await page.evaluate(() => {
+      document.getElementById('recipeEditor').value = '{"name":"Copy Feedback"}';
     });
 
-    // Expand step 3
-    await page.locator('#step3 .step-header').click();
-
-    const copyBtn = page.locator('#step3 .btn-secondary').filter({ hasText: 'Copy to Clipboard' });
+    await expandStep(page, 'step3');
+    const copyBtn = page.locator('#step3 .btn-secondary');
     await copyBtn.click();
 
-    await page.waitForTimeout(500);
-
-    // Check if any success indicator appears
-    const hasSuccessIndicator = await page.evaluate(() => {
-      return document.querySelector('.status') !== null ||
-             document.querySelector('[data-success]') !== null ||
-             document.body.textContent.includes('Copied');
-    });
-
-    expect(typeof hasSuccessIndicator).toBe('boolean');
+    // Button briefly reads "Copied!", then reverts after 2 seconds
+    await expect(copyBtn).toContainText('Copied!');
+    await expect(copyBtn).toContainText('Copy to Clipboard', { timeout: 4000 });
   });
 
   test('should include photos array in exported JSON', async ({ page }) => {

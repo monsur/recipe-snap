@@ -1,138 +1,87 @@
 const { test, expect } = require('@playwright/test');
 
+/**
+ * Opens step 2, taps "Take Photo", and waits until the mock camera is
+ * streaming frames so captures will succeed.
+ */
+async function openCameraReady(page) {
+  if (await page.locator('#step2').evaluate(el => el.classList.contains('collapsed'))) {
+    await page.locator('#step2 .step-header').click();
+  }
+  await page.locator('#takePhotoBtn').click();
+  await expect(page.locator('#cameraModal')).toBeVisible();
+  await page.waitForFunction(() => document.getElementById('cameraVideo').readyState >= 4);
+}
+
+async function capture(page, expectedTotal) {
+  await page.locator('#cameraCaptureBtn').click();
+  await expect.poll(() => page.evaluate(() => window.cameraState.capturedPhotos.length)).toBe(expectedTotal);
+}
+
 test.describe('Take Photo Camera Feature', () => {
-  test.beforeEach(async ({ page, context }) => {
-    // Grant camera permissions
-    await context.grantPermissions(['camera']);
+  test.beforeEach(async ({ page }) => {
+    // Install a fake camera before the app loads. The stream comes from an
+    // animated canvas, so it is a real MediaStream that a <video> can play
+    // and capturePhoto() can draw from, in every browser.
+    await page.addInitScript(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 480;
+      const ctx = canvas.getContext('2d');
+      let hue = 0;
+      setInterval(() => {
+        ctx.fillStyle = `hsl(${hue = (hue + 10) % 360}, 60%, 50%)`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }, 50);
+
+      // Patch the prototype rather than navigator.mediaDevices itself:
+      // WebKit can swap in a fresh MediaDevices object, dropping
+      // instance-level overrides.
+      MediaDevices.prototype.getUserMedia = async () => canvas.captureStream(20);
+      MediaDevices.prototype.enumerateDevices = async () => [
+        { kind: 'videoinput', label: 'Front Camera', deviceId: 'front' },
+        { kind: 'videoinput', label: 'Back Camera', deviceId: 'back' }
+      ];
+    });
 
     await page.goto('/');
-    await page.evaluate(() => {
-      localStorage.clear();
-      window.uploadedImages = [];
-      window.cameraState = {
-        stream: null,
-        facingMode: 'environment',
-        capturedPhotos: [],
-        hasMultipleCameras: false
-      };
-    });
-
-    // Mock getUserMedia for camera access
-    await page.addInitScript(() => {
-      // Create a mock video stream
-      const mockVideoTrack = {
-        kind: 'video',
-        label: 'Mock Camera',
-        enabled: true,
-        readyState: 'live',
-        stop: () => {},
-        getSettings: () => ({
-          width: 1920,
-          height: 1080
-        })
-      };
-
-      const mockStream = {
-        getVideoTracks: () => [mockVideoTrack],
-        getTracks: () => [mockVideoTrack],
-        active: true
-      };
-
-      // Mock getUserMedia
-      navigator.mediaDevices.getUserMedia = async (constraints) => {
-        console.log('Mock getUserMedia called with:', constraints);
-        return mockStream;
-      };
-
-      // Mock enumerateDevices
-      navigator.mediaDevices.enumerateDevices = async () => {
-        return [
-          { kind: 'videoinput', label: 'Front Camera', deviceId: 'front' },
-          { kind: 'videoinput', label: 'Back Camera', deviceId: 'back' }
-        ];
-      };
-    });
   });
 
   // Camera Modal UI Tests
   test('should open camera modal when Take Photo button clicked', async ({ page }) => {
-    // Expand step 2
     await page.locator('#step2 .step-header').click();
-
-    const takePhotoBtn = page.locator('#takePhotoBtn');
-    const cameraModal = page.locator('#cameraModal');
-
-    // Click Take Photo button
-    await takePhotoBtn.click();
-
-    // Wait for modal to be visible
-    await expect(cameraModal).toBeVisible({ timeout: 5000 });
+    await page.locator('#takePhotoBtn').click();
+    await expect(page.locator('#cameraModal')).toBeVisible({ timeout: 5000 });
   });
 
   test('should display camera controls and video preview', async ({ page }) => {
-    await page.locator('#step2 .step-header').click();
-    await page.locator('#takePhotoBtn').click();
+    await openCameraReady(page);
 
-    await page.waitForSelector('#cameraModal', { state: 'visible' });
-
-    // Check for video preview
-    const video = page.locator('#cameraVideo');
-    await expect(video).toBeVisible();
-
-    // Check for controls
-    const captureBtn = page.locator('#cameraCaptureBtn');
-    const doneBtn = page.locator('#cameraDoneBtn');
-    await expect(captureBtn).toBeVisible();
-    await expect(doneBtn).toBeVisible();
+    await expect(page.locator('#cameraVideo')).toBeVisible();
+    await expect(page.locator('#cameraCaptureBtn')).toBeVisible();
+    await expect(page.locator('#cameraDoneBtn')).toBeVisible();
+    await expect(page.locator('#cameraError')).toBeHidden();
   });
 
   test('should show camera switch button when multiple cameras available', async ({ page }) => {
-    await page.locator('#step2 .step-header').click();
-    await page.locator('#takePhotoBtn').click();
-
-    await page.waitForSelector('#cameraModal', { state: 'visible' });
-
-    // Wait for camera initialization
-    await page.waitForTimeout(500);
-
-    // Check if switch button is visible
-    const switchBtn = page.locator('#cameraSwitchBtn');
-    const isVisible = await switchBtn.isVisible();
-
-    // Should be visible because mock returns 2 cameras
-    expect(isVisible).toBe(true);
+    await openCameraReady(page);
+    await expect(page.locator('#cameraSwitchBtn')).toBeVisible();
   });
 
   test('should close camera modal when close button clicked', async ({ page }) => {
-    await page.locator('#step2 .step-header').click();
-    await page.locator('#takePhotoBtn').click();
-
-    await page.waitForSelector('#cameraModal', { state: 'visible' });
-
-    const closeBtn = page.locator('.camera-modal-close');
-    await closeBtn.click();
-
-    const cameraModal = page.locator('#cameraModal');
-    await expect(cameraModal).not.toBeVisible();
+    await openCameraReady(page);
+    await page.locator('.camera-modal-close').click();
+    await expect(page.locator('#cameraModal')).not.toBeVisible();
   });
 
   test('should close camera modal when ESC key pressed', async ({ page }) => {
-    await page.locator('#step2 .step-header').click();
-    await page.locator('#takePhotoBtn').click();
-
-    await page.waitForSelector('#cameraModal', { state: 'visible' });
-
-    // Press ESC key
+    await openCameraReady(page);
     await page.keyboard.press('Escape');
-
-    const cameraModal = page.locator('#cameraModal');
-    await expect(cameraModal).not.toBeVisible();
+    await expect(page.locator('#cameraModal')).not.toBeVisible();
   });
 
   // Camera Access Tests
   test('should have camera state initialized', async ({ page }) => {
-    await page.locator('#step2 .step-header').click();
-
     const cameraState = await page.evaluate(() => window.cameraState);
 
     expect(cameraState).toBeDefined();
@@ -142,279 +91,123 @@ test.describe('Take Photo Camera Feature', () => {
   });
 
   test('should detect multiple cameras', async ({ page }) => {
-    await page.locator('#step2 .step-header').click();
-    await page.locator('#takePhotoBtn').click();
-
-    await page.waitForSelector('#cameraModal', { state: 'visible' });
-    await page.waitForTimeout(500);
-
-    const hasMultipleCameras = await page.evaluate(() => window.cameraState.hasMultipleCameras);
-    expect(hasMultipleCameras).toBe(true);
+    await openCameraReady(page);
+    expect(await page.evaluate(() => window.cameraState.hasMultipleCameras)).toBe(true);
   });
 
   // Photo Capture Tests
   test('should capture photo when capture button clicked', async ({ page }) => {
-    await page.locator('#step2 .step-header').click();
-    await page.locator('#takePhotoBtn').click();
+    await openCameraReady(page);
+    await capture(page, 1);
 
-    await page.waitForSelector('#cameraModal', { state: 'visible' });
-    await page.waitForTimeout(500);
-
-    // Mock video ready state
-    await page.evaluate(() => {
-      const video = document.getElementById('cameraVideo');
-      Object.defineProperty(video, 'readyState', { value: 4 }); // HAVE_ENOUGH_DATA
-      Object.defineProperty(video, 'videoWidth', { value: 1920 });
-      Object.defineProperty(video, 'videoHeight', { value: 1080 });
-    });
-
-    const captureBtn = page.locator('#cameraCaptureBtn');
-    await captureBtn.click();
-
-    await page.waitForTimeout(200);
-
-    const capturedPhotos = await page.evaluate(() => window.cameraState.capturedPhotos.length);
-    expect(capturedPhotos).toBe(1);
+    const photo = await page.evaluate(() => window.cameraState.capturedPhotos[0]);
+    expect(photo).toMatch(/^data:image\/jpeg;base64,/);
   });
 
   test('should display captured photo in session thumbnails', async ({ page }) => {
-    await page.locator('#step2 .step-header').click();
-    await page.locator('#takePhotoBtn').click();
+    await openCameraReady(page);
+    await capture(page, 1);
 
-    await page.waitForSelector('#cameraModal', { state: 'visible' });
-    await page.waitForTimeout(500);
-
-    // Mock video ready state
-    await page.evaluate(() => {
-      const video = document.getElementById('cameraVideo');
-      Object.defineProperty(video, 'readyState', { value: 4 });
-      Object.defineProperty(video, 'videoWidth', { value: 1920 });
-      Object.defineProperty(video, 'videoHeight', { value: 1080 });
-    });
-
-    await page.locator('#cameraCaptureBtn').click();
-    await page.waitForTimeout(200);
-
-    const sessionThumbnails = page.locator('#cameraSessionThumbnails');
-    await expect(sessionThumbnails).toBeVisible();
-
-    const thumbnails = page.locator('.camera-session-thumbnail');
-    await expect(thumbnails).toHaveCount(1);
+    await expect(page.locator('#cameraSessionThumbnails')).toBeVisible();
+    await expect(page.locator('.camera-session-thumbnail')).toHaveCount(1);
   });
 
   test('should allow capturing multiple photos in session', async ({ page }) => {
-    await page.locator('#step2 .step-header').click();
-    await page.locator('#takePhotoBtn').click();
+    await openCameraReady(page);
+    await capture(page, 1);
+    await capture(page, 2);
+    await capture(page, 3);
 
-    await page.waitForSelector('#cameraModal', { state: 'visible' });
-    await page.waitForTimeout(500);
-
-    // Mock video ready state
-    await page.evaluate(() => {
-      const video = document.getElementById('cameraVideo');
-      Object.defineProperty(video, 'readyState', { value: 4 });
-      Object.defineProperty(video, 'videoWidth', { value: 1920 });
-      Object.defineProperty(video, 'videoHeight', { value: 1080 });
-    });
-
-    // Capture 3 photos
-    const captureBtn = page.locator('#cameraCaptureBtn');
-    await captureBtn.click();
-    await page.waitForTimeout(200);
-    await captureBtn.click();
-    await page.waitForTimeout(200);
-    await captureBtn.click();
-    await page.waitForTimeout(200);
-
-    const capturedPhotos = await page.evaluate(() => window.cameraState.capturedPhotos.length);
-    expect(capturedPhotos).toBe(3);
-
-    const thumbnails = page.locator('.camera-session-thumbnail');
-    await expect(thumbnails).toHaveCount(3);
+    await expect(page.locator('.camera-session-thumbnail')).toHaveCount(3);
   });
 
   // Session Management Tests
   test('should allow removing photos from session', async ({ page }) => {
-    await page.locator('#step2 .step-header').click();
-    await page.locator('#takePhotoBtn').click();
+    await openCameraReady(page);
+    await capture(page, 1);
+    await capture(page, 2);
 
-    await page.waitForSelector('#cameraModal', { state: 'visible' });
-    await page.waitForTimeout(500);
+    await page.locator('.camera-session-thumbnail-remove').first().click();
 
-    // Mock video and capture 2 photos
-    await page.evaluate(() => {
-      const video = document.getElementById('cameraVideo');
-      Object.defineProperty(video, 'readyState', { value: 4 });
-      Object.defineProperty(video, 'videoWidth', { value: 1920 });
-      Object.defineProperty(video, 'videoHeight', { value: 1080 });
-    });
-
-    await page.locator('#cameraCaptureBtn').click();
-    await page.waitForTimeout(200);
-    await page.locator('#cameraCaptureBtn').click();
-    await page.waitForTimeout(200);
-
-    // Remove first photo
-    const removeBtn = page.locator('.camera-session-thumbnail-remove').first();
-    await removeBtn.click();
-
-    const capturedPhotos = await page.evaluate(() => window.cameraState.capturedPhotos.length);
-    expect(capturedPhotos).toBe(1);
+    expect(await page.evaluate(() => window.cameraState.capturedPhotos.length)).toBe(1);
+    await expect(page.locator('.camera-session-thumbnail')).toHaveCount(1);
   });
 
   test('should process and add photos to main upload array', async ({ page }) => {
-    await page.locator('#step2 .step-header').click();
-    await page.locator('#takePhotoBtn').click();
+    await openCameraReady(page);
+    await capture(page, 1);
 
-    await page.waitForSelector('#cameraModal', { state: 'visible' });
-    await page.waitForTimeout(500);
-
-    // Mock video and capture a photo
-    await page.evaluate(() => {
-      const video = document.getElementById('cameraVideo');
-      Object.defineProperty(video, 'readyState', { value: 4 });
-      Object.defineProperty(video, 'videoWidth', { value: 1920 });
-      Object.defineProperty(video, 'videoHeight', { value: 1080 });
-    });
-
-    await page.locator('#cameraCaptureBtn').click();
-    await page.waitForTimeout(200);
-
-    // Click Done button
     await page.locator('#cameraDoneBtn').click();
-    await page.waitForTimeout(1000);
 
-    // Check if photo was added to uploadedImages
-    const imageCount = await page.evaluate(() => window.uploadedImages.length);
-    expect(imageCount).toBe(1);
-
-    // Check if modal closed
-    const cameraModal = page.locator('#cameraModal');
-    await expect(cameraModal).not.toBeVisible();
+    await expect(page.locator('#cameraModal')).not.toBeVisible();
+    expect(await page.evaluate(() => window.uploadedImages.length)).toBe(1);
   });
 
   test('should update main preview grid after processing', async ({ page }) => {
-    await page.locator('#step2 .step-header').click();
-    await page.locator('#takePhotoBtn').click();
-
-    await page.waitForSelector('#cameraModal', { state: 'visible' });
-    await page.waitForTimeout(500);
-
-    // Mock video and capture a photo
-    await page.evaluate(() => {
-      const video = document.getElementById('cameraVideo');
-      Object.defineProperty(video, 'readyState', { value: 4 });
-      Object.defineProperty(video, 'videoWidth', { value: 1920 });
-      Object.defineProperty(video, 'videoHeight', { value: 1080 });
-    });
-
-    await page.locator('#cameraCaptureBtn').click();
-    await page.waitForTimeout(200);
+    await openCameraReady(page);
+    await capture(page, 1);
+    await capture(page, 2);
 
     await page.locator('#cameraDoneBtn').click();
-    await page.waitForTimeout(1000);
 
-    // Check if preview grid is visible
-    const previewGrid = page.locator('#previewGrid');
-    await expect(previewGrid).toBeVisible();
-
-    // Check if preview item exists
-    const previewItems = page.locator('.preview-item');
-    await expect(previewItems).toHaveCount(1);
+    await expect(page.locator('#previewGrid')).toBeVisible();
+    await expect(page.locator('.preview-item')).toHaveCount(2);
   });
 
   test('should clear session thumbnails on new camera open', async ({ page }) => {
-    await page.locator('#step2 .step-header').click();
-    await page.locator('#takePhotoBtn').click();
+    await openCameraReady(page);
+    await capture(page, 1);
 
-    await page.waitForSelector('#cameraModal', { state: 'visible' });
-    await page.waitForTimeout(500);
-
-    // Mock video and capture a photo
-    await page.evaluate(() => {
-      const video = document.getElementById('cameraVideo');
-      Object.defineProperty(video, 'readyState', { value: 4 });
-      Object.defineProperty(video, 'videoWidth', { value: 1920 });
-      Object.defineProperty(video, 'videoHeight', { value: 1080 });
-    });
-
-    await page.locator('#cameraCaptureBtn').click();
-    await page.waitForTimeout(200);
-
-    // Close modal without processing
+    // Close modal without processing, then reopen
     await page.locator('.camera-modal-close').click();
+    await openCameraReady(page);
 
-    // Reopen camera
-    await page.locator('#takePhotoBtn').click();
-    await page.waitForSelector('#cameraModal', { state: 'visible' });
-    await page.waitForTimeout(500);
-
-    const capturedPhotos = await page.evaluate(() => window.cameraState.capturedPhotos.length);
-    expect(capturedPhotos).toBe(0);
+    expect(await page.evaluate(() => window.cameraState.capturedPhotos.length)).toBe(0);
+    await expect(page.locator('.camera-session-thumbnail')).toHaveCount(0);
   });
 
   // Integration Tests
   test('should work alongside file upload feature', async ({ page }) => {
     await page.locator('#step2 .step-header').click();
 
-    const takePhotoBtn = page.locator('#takePhotoBtn');
-    const uploadPhotosBtn = page.locator('#uploadBtn');
-
-    await expect(takePhotoBtn).toBeVisible();
-    await expect(uploadPhotosBtn).toBeVisible();
+    await expect(page.locator('#takePhotoBtn')).toBeVisible();
+    await expect(page.locator('#uploadBtn')).toBeVisible();
   });
 
   test('should have proper ARIA labels on modal and buttons', async ({ page }) => {
-    await page.locator('#step2 .step-header').click();
-    await page.locator('#takePhotoBtn').click();
-
-    await page.waitForSelector('#cameraModal', { state: 'visible' });
+    await openCameraReady(page);
 
     const modal = page.locator('#cameraModal');
-    const role = await modal.getAttribute('role');
-    const ariaModal = await modal.getAttribute('aria-modal');
-
-    expect(role).toBe('dialog');
-    expect(ariaModal).toBe('true');
-
-    const closeBtn = page.locator('.camera-modal-close');
-    const ariaLabel = await closeBtn.getAttribute('aria-label');
-    expect(ariaLabel).toBeTruthy();
+    await expect(modal).toHaveAttribute('role', 'dialog');
+    await expect(modal).toHaveAttribute('aria-modal', 'true');
+    await expect(page.locator('.camera-modal-close')).toHaveAttribute('aria-label', /.+/);
   });
 
   test('should close modal when Done clicked with no photos', async ({ page }) => {
-    await page.locator('#step2 .step-header').click();
-    await page.locator('#takePhotoBtn').click();
-
-    await page.waitForSelector('#cameraModal', { state: 'visible' });
-
+    await openCameraReady(page);
     await page.locator('#cameraDoneBtn').click();
-
-    const cameraModal = page.locator('#cameraModal');
-    await expect(cameraModal).not.toBeVisible();
+    await expect(page.locator('#cameraModal')).not.toBeVisible();
   });
+
   test('should reset Done button after processing so the next session can submit', async ({ page }) => {
-    // Seed a captured photo directly (bypasses the mocked video stream)
-    const runSession = () => page.evaluate(async () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 100;
-      canvas.height = 100;
-      canvas.getContext('2d').fillRect(0, 0, 100, 100);
-      window.cameraState.capturedPhotos = [canvas.toDataURL('image/jpeg')];
-      await processCapturedPhotos();
-    });
+    // First session: capture and submit
+    await openCameraReady(page);
+    await capture(page, 1);
+    await page.locator('#cameraDoneBtn').click();
+    await expect(page.locator('#cameraModal')).not.toBeVisible();
 
-    await runSession();
-
+    // Done button should be back to its normal state
     const doneBtn = page.locator('#cameraDoneBtn');
     await expect(doneBtn).toBeEnabled();
     await expect(doneBtn).not.toContainText('Processing');
     await expect(doneBtn.locator('polyline')).toHaveCount(1);
 
-    // Second session (e.g. after "Start New Recipe") should also work
-    await page.evaluate(() => { window.uploadedImages = []; });
-    await runSession();
+    // Second session (e.g. after "Start New Recipe") should also submit
+    await page.locator('.btn-reset').click();
+    await openCameraReady(page);
+    await capture(page, 1);
+    await doneBtn.click();
+    await expect(page.locator('#cameraModal')).not.toBeVisible();
     expect(await page.evaluate(() => window.uploadedImages.length)).toBe(1);
-    await expect(doneBtn).toBeEnabled();
   });
 });

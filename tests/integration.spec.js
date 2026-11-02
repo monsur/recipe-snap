@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const path = require('path');
+const { expandStep, stubClipboard, readStubClipboard, collectDialogs } = require('./helpers');
 
 test.describe('End-to-End Integration Tests', () => {
   test.beforeEach(async ({ page }) => {
@@ -111,10 +111,6 @@ test.describe('End-to-End Integration Tests', () => {
   test('workflow with multiple images', async ({ page }) => {
     await page.evaluate(() => {
       localStorage.setItem('geminiApiKey', 'multi-image-test');
-    });
-
-    // Mock multiple images
-    await page.evaluate(() => {
       window.uploadedImages = [
         'data:image/jpeg;base64,image1data',
         'data:image/jpeg;base64,image2data',
@@ -125,136 +121,106 @@ test.describe('End-to-End Integration Tests', () => {
     const mockRecipe = {
       name: 'Multi-Page Recipe',
       ingredients: 'Various ingredients from multiple pages',
-      directions: ['Combined from all images']
+      directions: 'Combined from all images'
     };
 
+    let requestBody = null;
     await page.route('**/generativelanguage.googleapis.com/**', async route => {
+      requestBody = route.request().postDataJSON();
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({
-          candidates: [{
-            content: {
-              parts: [{
-                text: JSON.stringify(mockRecipe)
-              }]
-            }
-          }]
-        })
+        body: JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(mockRecipe) }] } }] })
       });
     });
 
-    await page.locator('#step2 .btn-primary').click();
-    await page.waitForTimeout(1000);
+    await expandStep(page, 'step2');
+    await page.locator('#extractBtn').click();
+    await expect.poll(() => page.evaluate(() => window.extractedRecipe?.name)).toBe('Multi-Page Recipe');
 
-    // Verify all images were processed
-    const imageCount = await page.evaluate(() => {
-      return window.uploadedImages ? window.uploadedImages.length : 0;
-    });
-
-    expect(imageCount).toBe(3);
+    // All three images were sent in a single request, after the prompt
+    const parts = requestBody.contents[0].parts;
+    const imageParts = parts.filter(p => p.inlineData);
+    expect(imageParts.map(p => p.inlineData.data)).toEqual(['image1data', 'image2data', 'image3data']);
   });
 
   test('error handling: API key missing', async ({ page }) => {
-    // Don't set API key
-    let alertShown = false;
-    page.on('dialog', async dialog => {
-      alertShown = true;
-      await dialog.accept();
-    });
-
-    // Try to extract without API key
+    const dialogs = collectDialogs(page);
     await page.evaluate(() => {
       window.uploadedImages = ['data:image/jpeg;base64,test'];
     });
 
-    await page.locator('#step2 .btn-primary').click();
-    await page.waitForTimeout(500);
+    await expandStep(page, 'step2');
+    await page.locator('#extractBtn').click();
 
-    // Should show error (once implemented)
-    expect(typeof alertShown).toBe('boolean');
+    await expect.poll(() => dialogs.length).toBe(1);
+    expect(dialogs[0]).toContain('API key');
   });
 
   test('error handling: no images uploaded', async ({ page }) => {
+    const dialogs = collectDialogs(page);
     await page.evaluate(() => {
       localStorage.setItem('geminiApiKey', 'test-key');
       window.uploadedImages = [];
     });
 
-    let alertShown = false;
-    page.on('dialog', async dialog => {
-      alertShown = true;
-      await dialog.accept();
-    });
+    await expandStep(page, 'step2');
+    await page.locator('#extractBtn').click();
 
-    await page.locator('#step2 .btn-primary').click();
-    await page.waitForTimeout(500);
-
-    // Should show error about missing images
-    expect(typeof alertShown).toBe('boolean');
+    await expect.poll(() => dialogs.length).toBe(1);
+    expect(dialogs[0]).toContain('upload');
   });
 
   test('error handling: invalid JSON in editor', async ({ page }) => {
-    const editor = page.locator('#step3 textarea');
-    await editor.fill('{ this is not valid json }');
-
-    let errorShown = false;
-    page.on('dialog', async dialog => {
-      errorShown = true;
-      await dialog.accept();
-    });
+    const dialogs = collectDialogs(page);
+    await expandStep(page, 'step3');
+    await page.locator('#recipeEditor').fill('{ this is not valid json }');
 
     await page.locator('#step3 .btn-primary').filter({ hasText: /Download/ }).click();
-    await page.waitForTimeout(500);
 
-    // Should validate JSON
-    expect(typeof errorShown).toBe('boolean');
+    await expect.poll(() => dialogs.length).toBe(1);
+    expect(dialogs[0]).toContain('Invalid JSON');
   });
 
   test('step collapsing workflow', async ({ page }) => {
     const step1 = page.locator('#step1');
     const step2 = page.locator('#step2');
 
-    // Step 1 starts expanded
+    // With no saved API key, step 1 starts expanded and step 2 collapsed
     await expect(step1).not.toHaveClass(/collapsed/);
+    await expect(step2).toHaveClass(/collapsed/);
 
-    // Complete step 1
+    // Saving settings collapses step 1 and opens step 2
     await page.locator('#apiKey').fill('test-key');
     await page.locator('#step1 .btn-primary').click();
+    await expect(step1).toHaveClass(/collapsed/);
+    await expect(step2).not.toHaveClass(/collapsed/);
 
-    // Collapse step 1, expand step 2
+    // Clicking a step header toggles it
+    await page.locator('#step1 .step-header').click();
+    await expect(step1).not.toHaveClass(/collapsed/);
     await page.locator('#step1 .step-header').click();
     await expect(step1).toHaveClass(/collapsed/);
-
-    // Work on step 2
-    await expect(step2).not.toHaveClass(/collapsed/);
   });
 
   test('copy to clipboard workflow', async ({ page }) => {
-    await page.context().grantPermissions(['clipboard-write', 'clipboard-read']);
+    await stubClipboard(page);
 
     const testRecipe = {
       name: 'Clipboard Recipe',
       ingredients: 'test ingredients',
-      directions: ['test step']
+      directions: 'test step'
     };
+    const json = JSON.stringify(testRecipe, null, 2);
 
-    await page.evaluate((recipe) => {
-      window.extractedRecipe = recipe;
-      const editor = document.querySelector('#step3 textarea');
-      if (editor) {
-        editor.value = JSON.stringify(recipe, null, 2);
-      }
-    }, testRecipe);
+    await page.evaluate((text) => {
+      document.getElementById('recipeEditor').value = text;
+    }, json);
 
+    await expandStep(page, 'step3');
     await page.locator('#step3 .btn-secondary').filter({ hasText: 'Copy to Clipboard' }).click();
-    await page.waitForTimeout(500);
 
-    const clipboardContent = await page.evaluate(() => {
-      return navigator.clipboard.readText().catch(() => '');
-    });
-
-    expect(typeof clipboardContent).toBe('string');
+    await expect.poll(() => readStubClipboard(page)).toBe(json);
   });
 
   test('clear all data workflow', async ({ page }) => {
@@ -264,122 +230,79 @@ test.describe('End-to-End Integration Tests', () => {
     await page.locator('#model').fill('custom-model');
     await page.locator('#step1 .btn-primary').click();
 
-    // Verify data exists
-    let hasData = await page.evaluate(() => {
-      return localStorage.getItem('geminiApiKey') !== null;
-    });
-    expect(hasData).toBe(true);
+    expect(await page.evaluate(() => localStorage.getItem('geminiApiKey'))).toBe('test-to-clear');
 
-    // Mock confirm dialog
+    // Accept the confirmation dialog
     page.on('dialog', dialog => dialog.accept());
 
-    // Clear data
+    // Saving collapsed step 1; reopen it to reach the clear-data link
+    await expandStep(page, 'step1');
     await page.locator('.clear-data-link').click();
-    await page.waitForTimeout(500);
 
-    // Verify data is cleared
-    hasData = await page.evaluate(() => {
-      return localStorage.getItem('geminiApiKey') !== null;
-    });
-    expect(hasData).toBe(false);
-
-    // Verify inputs are reset
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('geminiApiKey'))).toBeNull();
     await expect(page.locator('#apiKey')).toHaveValue('');
+    await expect(page.locator('#model')).toHaveValue(await page.evaluate(() => CONFIG.defaults.model));
   });
 
   test('recipe with special characters and formatting', async ({ page }) => {
     await page.evaluate(() => {
       localStorage.setItem('geminiApiKey', 'special-chars-test');
+      window.uploadedImages = ['data:image/jpeg;base64,test'];
     });
 
     const complexRecipe = {
       name: 'Mom\'s "Famous" Café Crème Brûlée',
       ingredients: '2 cups heavy cream\n1/2 cup sugar\n5 egg yolks\n1 tsp vanilla extract\nPinch of salt',
-      directions: [
-        'Heat cream to 180°F (don\'t boil!)',
-        'Whisk eggs & sugar until pale',
-        'Temper eggs with hot cream',
-        'Strain through fine-mesh sieve',
-        'Pour into ramekins & bake at 325°F for 40-45 min'
-      ],
+      directions: 'Heat cream to 180°F (don\'t boil!)\nWhisk eggs & sugar until pale\nTemper eggs with hot cream',
       servings: '6',
       prep_time: '15 minutes',
       cook_time: '45 minutes'
     };
 
-    await page.evaluate(() => {
-      window.uploadedImages = ['data:image/jpeg;base64,test'];
-    });
-
     await page.route('**/generativelanguage.googleapis.com/**', async route => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({
-          candidates: [{
-            content: {
-              parts: [{
-                text: JSON.stringify(complexRecipe)
-              }]
-            }
-          }]
-        })
+        body: JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(complexRecipe) }] } }] })
       });
     });
 
-    await page.locator('#step2 .btn-primary').click();
-    await page.waitForTimeout(1000);
+    await expandStep(page, 'step2');
+    await page.locator('#extractBtn').click();
 
-    // Verify special characters are handled
-    const editorContent = await page.locator('#step3 textarea').inputValue();
-    expect(typeof editorContent).toBe('string');
+    // Editor shows the recipe with every character intact
+    await expect(page.locator('#recipeEditor')).not.toHaveValue('');
+    const parsed = JSON.parse(await page.locator('#recipeEditor').inputValue());
+    expect(parsed.name).toBe(complexRecipe.name);
+    expect(parsed.ingredients).toBe(complexRecipe.ingredients);
+    expect(parsed.directions).toBe(complexRecipe.directions);
   });
 
-  test('API rate limiting and retry logic', async ({ page }) => {
+  test('API rate limiting shows an error', async ({ page }) => {
+    const dialogs = collectDialogs(page);
     await page.evaluate(() => {
       localStorage.setItem('geminiApiKey', 'rate-limit-test');
       window.uploadedImages = ['data:image/jpeg;base64,test'];
     });
 
     let attemptCount = 0;
-
     await page.route('**/generativelanguage.googleapis.com/**', async route => {
       attemptCount++;
-
-      if (attemptCount === 1) {
-        // First attempt: rate limit error
-        await route.fulfill({
-          status: 429,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            error: {
-              message: 'Rate limit exceeded'
-            }
-          })
-        });
-      } else {
-        // Subsequent attempts: success
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            candidates: [{
-              content: {
-                parts: [{
-                  text: '{"name":"Retry Success"}'
-                }]
-              }
-            }]
-          })
-        });
-      }
+      await route.fulfill({
+        status: 429,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { message: 'Rate limit exceeded' } })
+      });
     });
 
-    await page.locator('#step2 .btn-primary').click();
-    await page.waitForTimeout(2000);
+    await expandStep(page, 'step2');
+    await page.locator('#extractBtn').click();
 
-    // Should handle rate limiting gracefully
-    expect(attemptCount).toBeGreaterThanOrEqual(1);
+    // No automatic retry yet: one request, and the user sees the API's message
+    await expect.poll(() => dialogs.length).toBe(1);
+    expect(dialogs[0]).toContain('Rate limit exceeded');
+    expect(attemptCount).toBe(1);
+    await expect(page.locator('#extractBtn')).toBeEnabled();
   });
 
   test('reset button is visible on the page', async ({ page }) => {
