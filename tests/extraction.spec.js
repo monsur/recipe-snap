@@ -12,12 +12,11 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
     });
   });
 
-  test('should have Gemini SDK loaded', async ({ page }) => {
-    // Check if Google Generative AI SDK script is included
-    const geminiScript = page.locator('script[src*="generative"]');
-    const scriptCount = await geminiScript.count();
-
-    expect(scriptCount).toBeGreaterThanOrEqual(0);
+  test('should load no external scripts up front', async ({ page }) => {
+    // Gemini is called with fetch (no SDK), and the HEIC library loads on demand
+    const externalScripts = await page.evaluate(() =>
+      [...document.querySelectorAll('script[src]')].map(s => s.src));
+    expect(externalScripts).toEqual([]);
   });
 
   test('should have extract recipe function defined', async ({ page }) => {

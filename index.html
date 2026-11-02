@@ -1994,23 +1994,6 @@
             editor.value = formattedJson;
 
             console.log('Recipe displayed in editor');
-            console.log(`Recipe has ${recipe.photos?.length || 0} photos in JSON`);
-
-            // Check if photos are valid
-            if (recipe.photos && recipe.photos.length > 0) {
-                const firstPhoto = recipe.photos[0];
-                const lastPhoto = recipe.photos[recipe.photos.length - 1];
-
-                // Check if photos have the expected object structure
-                if (firstPhoto.data && lastPhoto.data) {
-                    const firstPhotoLength = firstPhoto.data.length;
-                    const lastPhotoLength = lastPhoto.data.length;
-                    console.log(`First photo data length: ${firstPhotoLength}, Last photo data length: ${lastPhotoLength}`);
-                    console.log(`First photo: name="${firstPhoto.name}", filename="${firstPhoto.filename}"`);
-                } else {
-                    console.warn('⚠️ Photos may be corrupted - missing data property');
-                }
-            }
         }
 
         /**
@@ -2117,16 +2100,6 @@
                     alert('Failed to copy to clipboard. Please copy manually.');
                 }
             }
-        }
-
-        /**
-         * Clears the recipe editor and extracted recipe state
-         */
-        function clearEditor() {
-            const editor = document.getElementById('recipeEditor');
-            editor.value = '';
-            window.extractedRecipe = null;
-            console.log('Editor cleared');
         }
 
         /**

@@ -256,27 +256,6 @@ test.describe('Step 3: Download - Recipe Export', () => {
     }
   });
 
-  test('should clear editor when starting new recipe', async ({ page }) => {
-    // Fill editor
-    const editor = page.locator('#step3 textarea');
-    await editor.fill('{"name":"Old Recipe"}');
-
-    // Simulate starting new extraction
-    await page.evaluate(() => {
-      window.extractedRecipe = null;
-      if (window.clearEditor) {
-        window.clearEditor();
-      }
-    });
-
-    // Check if clear function exists
-    const hasClearFunction = await page.evaluate(() => {
-      return typeof window.clearEditor === 'function';
-    });
-
-    expect(typeof hasClearFunction).toBe('boolean');
-  });
-
   test('should download a gzip-compressed file, not plain JSON', async ({ page }) => {
     const recipe = { name: 'Gzip Test Recipe', ingredients: 'flour, eggs', directions: ['Mix', 'Bake'] };
 
