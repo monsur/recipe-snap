@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { expandStep, stubClipboard, readStubClipboard, collectDialogs } = require('./helpers');
+const { expandStep, stubClipboard, readStubClipboard, collectDialogs, fastRetries } = require('./helpers');
 
 test.describe('End-to-End Integration Tests', () => {
   test.beforeEach(async ({ page }) => {
@@ -278,8 +278,9 @@ test.describe('End-to-End Integration Tests', () => {
     expect(parsed.directions).toBe(complexRecipe.directions);
   });
 
-  test('API rate limiting shows an error', async ({ page }) => {
+  test('API rate limiting retries, then shows an error', async ({ page }) => {
     const dialogs = collectDialogs(page);
+    await fastRetries(page);
     await page.evaluate(() => {
       localStorage.setItem('geminiApiKey', 'rate-limit-test');
       window.uploadedImages = ['data:image/jpeg;base64,test'];
@@ -298,10 +299,10 @@ test.describe('End-to-End Integration Tests', () => {
     await expandStep(page, 'step2');
     await page.locator('#extractBtn').click();
 
-    // No automatic retry yet: one request, and the user sees the API's message
+    // Retried up to the limit, then the user sees the API's message
     await expect.poll(() => dialogs.length).toBe(1);
     expect(dialogs[0]).toContain('Rate limit exceeded');
-    expect(attemptCount).toBe(1);
+    expect(attemptCount).toBe(3);
     await expect(page.locator('#extractBtn')).toBeEnabled();
   });
 

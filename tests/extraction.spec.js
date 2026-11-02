@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { fastRetries } = require('./helpers');
 
 test.describe('Step 2: Extraction - Gemini API Integration', () => {
   test.beforeEach(async ({ page }) => {
@@ -399,7 +400,9 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
   });
 
   test('should show error when Gemini returns unparseable text', async ({ page }) => {
+    let attempts = 0;
     await page.route('**/generativelanguage.googleapis.com/**', async route => {
+      attempts++;
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -415,13 +418,15 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
       await dialog.accept();
     });
 
+    await fastRetries(page);
     await page.evaluate(() => { window.uploadedImages = ['data:image/jpeg;base64,test']; });
     await page.locator('#step2 .step-header').click();
     await page.locator('#extractBtn').click();
-    await page.waitForTimeout(1000);
 
-    expect(alertMessage.toLowerCase()).toContain('failed');
+    await expect.poll(() => alertMessage).toContain('Failed');
+    expect(attempts).toBe(3);
   });
+
   // Helper: mock a Gemini response body and return the alert message shown
   async function extractWithResponse(page, body) {
     await page.route('**/generativelanguage.googleapis.com/**', async route => {
@@ -505,5 +510,97 @@ test.describe('Step 2: Extraction - Gemini API Integration', () => {
     });
     expect(msg).toBe('');
     expect(await page.evaluate(() => window.extractedRecipe?.ingredients)).toBe('1 egg');
+  });
+});
+
+test.describe('Retrying temporary failures', () => {
+  const RECIPE = { name: 'Retried Soup', ingredients: 'Water', directions: 'Boil' };
+  const okBody = JSON.stringify({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify(RECIPE) }] } }] });
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem('geminiApiKey', 'key');
+    });
+    await page.reload();
+    await fastRetries(page);
+    await page.evaluate(() => { window.uploadedImages = ['data:image/jpeg;base64,test']; });
+  });
+
+  // Serves `first` for the first request and a valid recipe after that
+  async function failOnceThenSucceed(page, first) {
+    const state = { attempts: 0 };
+    await page.route('**/generativelanguage.googleapis.com/**', async route => {
+      state.attempts++;
+      if (state.attempts === 1) {
+        await first(route);
+      } else {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: okBody });
+      }
+    });
+    return state;
+  }
+
+  for (const status of [429, 500, 503]) {
+    test(`retries after HTTP ${status}`, async ({ page }) => {
+      const state = await failOnceThenSucceed(page, route => route.fulfill({
+        status, contentType: 'application/json', body: JSON.stringify({ error: { message: `status ${status}` } })
+      }));
+      await page.locator('#extractBtn').click();
+      await expect.poll(() => page.evaluate(() => window.extractedRecipe?.name)).toBe('Retried Soup');
+      expect(state.attempts).toBe(2);
+    });
+  }
+
+  test('retries after a network failure', async ({ page }) => {
+    const state = await failOnceThenSucceed(page, route => route.abort('failed'));
+    await page.locator('#extractBtn').click();
+    await expect.poll(() => page.evaluate(() => window.extractedRecipe?.name)).toBe('Retried Soup');
+    expect(state.attempts).toBe(2);
+  });
+
+  test('retries after a reply that is not valid JSON', async ({ page }) => {
+    const state = await failOnceThenSucceed(page, route => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"name": "Trunc' }] } }] })
+    }));
+    await page.locator('#extractBtn').click();
+    await expect.poll(() => page.evaluate(() => window.extractedRecipe?.name)).toBe('Retried Soup');
+    expect(state.attempts).toBe(2);
+  });
+
+  test('does not retry a bad request such as an invalid API key', async ({ page }) => {
+    const dialogs = [];
+    page.on('dialog', async d => { dialogs.push(d.message()); await d.accept(); });
+    const state = await failOnceThenSucceed(page, route => route.fulfill({
+      status: 400, contentType: 'application/json', body: JSON.stringify({ error: { message: 'API key not valid' } })
+    }));
+    await page.locator('#extractBtn').click();
+    await expect.poll(() => dialogs.length).toBe(1);
+    expect(dialogs[0]).toContain('API key');
+    expect(state.attempts).toBe(1);
+  });
+
+  test('does not retry a blocked response', async ({ page }) => {
+    const dialogs = [];
+    page.on('dialog', async d => { dialogs.push(d.message()); await d.accept(); });
+    const state = await failOnceThenSucceed(page, route => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify({ candidates: [{ finishReason: 'SAFETY' }] })
+    }));
+    await page.locator('#extractBtn').click();
+    await expect.poll(() => dialogs.length).toBe(1);
+    expect(dialogs[0]).toContain('safety filters');
+    expect(state.attempts).toBe(1);
+  });
+
+  test('keeps the button disabled while retrying', async ({ page }) => {
+    await page.evaluate(() => { CONFIG.retry.baseDelayMs = 1500; });
+    await failOnceThenSucceed(page, route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }));
+    await page.locator('#extractBtn').click();
+    await page.waitForTimeout(500);
+    await expect(page.locator('#extractBtn')).toBeDisabled();
+    await expect.poll(() => page.evaluate(() => window.extractedRecipe?.name), { timeout: 5000 }).toBe('Retried Soup');
+    await expect(page.locator('#extractBtn')).toBeEnabled();
   });
 });

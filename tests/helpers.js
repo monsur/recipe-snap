@@ -46,4 +46,11 @@ function collectDialogs(page) {
   return messages;
 }
 
-module.exports = { expandStep, stubClipboard, readStubClipboard, collectDialogs };
+/**
+ * Shrinks the app's retry delays so tests that exercise retries run fast.
+ */
+async function fastRetries(page) {
+  await page.evaluate(() => { CONFIG.retry.baseDelayMs = 1; });
+}
+
+module.exports = { expandStep, stubClipboard, readStubClipboard, collectDialogs, fastRetries };

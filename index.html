@@ -1576,6 +1576,11 @@
                 source: '',
                 prompt: `Analyze the provided image(s) and extract the recipe. The images may be out of order.`
             },
+            // Retries for temporary failures (rate limits, server errors, bad JSON)
+            retry: {
+                attempts: 3,
+                baseDelayMs: 1000
+            },
             // Earlier default values. A saved setting that matches one of these was
             // never a deliberate choice (Save used to store every field), so it is
             // discarded and the current default is used instead.
@@ -1656,6 +1661,83 @@
                     return `Gemini's safety filters blocked this response (${finishReason}). Try different photos.`;
                 default:
                     return `Gemini stopped before finishing (${finishReason}). Please try again.`;
+            }
+        }
+
+        /**
+         * Error for failures worth retrying (network errors, rate limits,
+         * server errors, malformed responses).
+         */
+        class RetryableError extends Error {}
+
+        // HTTP statuses that usually succeed on a later attempt
+        const RETRYABLE_STATUSES = [429, 500, 502, 503, 504];
+
+        /**
+         * Calls fn, retrying RetryableErrors with increasing delays
+         * (CONFIG.retry.baseDelayMs, then 2x, 4x...). Other errors are thrown at once.
+         */
+        async function withRetry(fn) {
+            const { attempts, baseDelayMs } = CONFIG.retry;
+            for (let attempt = 1; ; attempt++) {
+                try {
+                    return await fn();
+                } catch (error) {
+                    if (!(error instanceof RetryableError) || attempt >= attempts) {
+                        throw error;
+                    }
+                    const delay = baseDelayMs * 2 ** (attempt - 1);
+                    console.log(`Attempt ${attempt} failed (${error.message}). Retrying in ${delay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+
+        /**
+         * Sends one request to Gemini and returns the parsed recipe object.
+         * Throws RetryableError for failures worth another attempt.
+         */
+        async function requestRecipe(apiUrl, requestBody) {
+            let response;
+            try {
+                response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+            } catch (networkError) {
+                throw new RetryableError(`Network error: ${networkError.message}`);
+            }
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                const message = errorData.error?.message || `API request failed with status ${response.status}`;
+                throw RETRYABLE_STATUSES.includes(response.status) ? new RetryableError(message) : new Error(message);
+            }
+
+            const data = await response.json();
+            console.log('Received response from API');
+
+            // Surface blocked or truncated responses with a specific message
+            const blockedMessage = getGeminiBlockedMessage(data);
+            if (blockedMessage) {
+                throw new Error(blockedMessage);
+            }
+
+            // Extract text from response
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!text) {
+                throw new Error('No text content in API response');
+            }
+
+            // 8. Parse JSON from response
+            try {
+                return JSON.parse(text);
+            } catch (parseError) {
+                console.error('Failed to parse JSON:', parseError);
+                throw new RetryableError('Failed to parse recipe data from API response. Please try again.');
             }
         }
 
@@ -1746,46 +1828,10 @@
                     }
                 };
 
-                // 7. Call Gemini API with fetch
+                // 7. Call Gemini API, retrying temporary failures
                 console.log(`Sending ${imageParts.length} image(s) to Gemini API...`);
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(requestBody)
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    throw new Error(errorData.error?.message || `API request failed with status ${response.status}`);
-                }
-
-                const data = await response.json();
-                console.log('Received response from API');
-
-                // Surface blocked or truncated responses with a specific message
-                const blockedMessage = getGeminiBlockedMessage(data);
-                if (blockedMessage) {
-                    throw new Error(blockedMessage);
-                }
-
-                // Extract text from response
-                const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                if (!text) {
-                    throw new Error('No text content in API response');
-                }
-
-                // 8. Parse JSON from response
-                let recipeJson;
-                try {
-                    recipeJson = JSON.parse(text);
-                } catch (parseError) {
-                    console.error('Failed to parse JSON:', parseError);
-                    throw new Error('Failed to parse recipe data from API response. Please try again.');
-                }
+                const recipeJson = await withRetry(() => requestRecipe(apiUrl, requestBody));
 
                 // The schema guarantees the fields exist, not that they have content.
                 // Blurry photos or non-recipe images come back empty.
