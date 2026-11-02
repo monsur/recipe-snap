@@ -203,6 +203,41 @@ test.describe('Take Photo Camera Feature', () => {
     expect(await page.locator('#cameraVideo').evaluate(v => v.paused)).toBe(false);
   });
 
+  test('on a phone, the preview fills its box and the buttons stay on screen', async ({ page }) => {
+    await page.setViewportSize({ width: 393, height: 659 });
+    const rect = sel => page.locator(sel).evaluate(el => {
+      const r = el.getBoundingClientRect();
+      return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) };
+    });
+    const expectPreviewFillsBox = async () => {
+      expect(await rect('#cameraVideo')).toEqual(await rect('.camera-video-container'));
+      expect((await rect('.camera-controls')).bottom).toBeLessThanOrEqual(659);
+      expect((await rect('#cameraDoneBtn')).right).toBeLessThanOrEqual(393);
+    };
+
+    await openCameraReady(page);
+    await expectPreviewFillsBox();
+
+    // Thumbnails take space from the preview, not from the buttons
+    await capture(page, 1);
+    await expectPreviewFillsBox();
+
+    // Reopening gives the same layout as the first time
+    const firstOpen = await rect('.camera-video-container');
+    await page.locator('.camera-modal-close').click();
+    await openCameraReady(page);
+    expect(await rect('.camera-video-container')).toEqual(firstOpen);
+    await expectPreviewFillsBox();
+  });
+
+  test('on a desktop, the preview keeps its 4:3 box', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openCameraReady(page);
+    const box = await page.locator('.camera-video-container').boundingBox();
+    expect(box.width / box.height).toBeCloseTo(4 / 3, 1);
+    expect(await page.locator('#cameraVideo').boundingBox()).toEqual(box);
+  });
+
   test('Done is hidden until a photo is taken', async ({ page }) => {
     await openCameraReady(page);
     const doneBtn = page.locator('#cameraDoneBtn');
