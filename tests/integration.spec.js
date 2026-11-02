@@ -439,3 +439,55 @@ test.describe('End-to-End Integration Tests', () => {
     expect(extracted.source).toBeFalsy();
   });
 });
+
+test.describe('Clear all data', () => {
+  test('also clears the recipe, editor, and status, and returns to setup', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem('geminiApiKey', 'key');
+    });
+    await page.reload();
+
+    // Simulate a finished extraction
+    await page.evaluate(() => {
+      window.uploadedImages = ['data:image/jpeg;base64,abc'];
+      updatePreviewGrid();
+      const recipe = { name: 'Leftover', ingredients: 'i', directions: 'd' };
+      window.extractedRecipe = recipe;
+      displayRecipeInEditor(recipe);
+      document.getElementById('extractionStatus').style.display = 'flex';
+      document.getElementById('step2').classList.add('collapsed');
+      document.getElementById('step3').classList.remove('collapsed');
+    });
+
+    page.on('dialog', d => d.accept());
+    await expandStep(page, 'step1');
+    await page.locator('.advanced-toggle').click();
+    await page.locator('.clear-data-link').click();
+
+    await expect(page.locator('#recipeEditor')).toHaveValue('');
+    await expect(page.locator('#extractionStatus')).toBeHidden();
+    await expect(page.locator('#previewGrid')).toBeHidden();
+    expect(await page.evaluate(() => [window.extractedRecipe, window.uploadedImages.length])).toEqual([null, 0]);
+
+    await expect(page.locator('#step1')).not.toHaveClass(/collapsed/);
+    await expect(page.locator('#step2')).toHaveClass(/collapsed/);
+    await expect(page.locator('#step3')).toHaveClass(/collapsed/);
+  });
+
+  test('cancelling the confirmation changes nothing', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => {
+      localStorage.setItem('geminiApiKey', 'key');
+      document.getElementById('recipeEditor').value = '{"name":"Keep"}';
+    });
+
+    page.on('dialog', d => d.dismiss());
+    await page.locator('.advanced-toggle').click();
+    await page.locator('.clear-data-link').click();
+
+    await expect(page.locator('#recipeEditor')).toHaveValue('{"name":"Keep"}');
+    expect(await page.evaluate(() => localStorage.getItem('geminiApiKey'))).toBe('key');
+  });
+});
