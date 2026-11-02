@@ -1576,6 +1576,8 @@
                 source: '',
                 prompt: `Analyze the provided image(s) and extract the recipe. The images may be out of order.`
             },
+            // Maximum time to wait for each Gemini request
+            timeoutMs: 90000,
             // Retries for temporary failures (rate limits, server errors, bad JSON)
             retry: {
                 attempts: 3,
@@ -1698,26 +1700,42 @@
          * Throws RetryableError for failures worth another attempt.
          */
         async function requestRecipe(apiUrl, requestBody) {
+            // Abort if Gemini hasn't fully responded within CONFIG.timeoutMs
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), CONFIG.timeoutMs);
             let response;
+            let data;
             try {
                 response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(requestBody)
+                    body: JSON.stringify(requestBody),
+                    signal: controller.signal
+                });
+                data = await response.json().catch(parseError => {
+                    if (controller.signal.aborted) throw parseError; // timed out mid-read
+                    return response.ok ? null : {};
                 });
             } catch (networkError) {
+                if (controller.signal.aborted) {
+                    const seconds = Math.round(CONFIG.timeoutMs / 1000);
+                    throw new Error(`Gemini didn't respond within ${seconds} seconds. Check your connection, or try fewer photos.`);
+                }
                 throw new RetryableError(`Network error: ${networkError.message}`);
+            } finally {
+                clearTimeout(timer);
             }
 
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                const message = errorData.error?.message || `API request failed with status ${response.status}`;
+                const message = data.error?.message || `API request failed with status ${response.status}`;
                 throw RETRYABLE_STATUSES.includes(response.status) ? new RetryableError(message) : new Error(message);
             }
 
-            const data = await response.json();
+            if (!data) {
+                throw new RetryableError('Received an unreadable response from Gemini.');
+            }
             console.log('Received response from API');
 
             // Surface blocked or truncated responses with a specific message

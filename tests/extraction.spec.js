@@ -604,3 +604,53 @@ test.describe('Retrying temporary failures', () => {
     await expect(page.locator('#extractBtn')).toBeEnabled();
   });
 });
+
+test.describe('Request timeout', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem('geminiApiKey', 'key');
+    });
+    await page.reload();
+    await page.evaluate(() => {
+      CONFIG.timeoutMs = 500;
+      CONFIG.retry.baseDelayMs = 1;
+      window.uploadedImages = ['data:image/jpeg;base64,test'];
+    });
+  });
+
+  test('gives up on a request that takes too long, without retrying', async ({ page }) => {
+    const dialogs = [];
+    page.on('dialog', async d => { dialogs.push(d.message()); await d.accept(); });
+
+    let attempts = 0;
+    await page.route('**/generativelanguage.googleapis.com/**', async route => {
+      attempts++;
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }).catch(() => {});
+    });
+
+    await page.locator('#extractBtn').click();
+
+    await expect.poll(() => dialogs.length, { timeout: 5000 }).toBe(1);
+    expect(dialogs[0]).toContain("didn't respond within 1 seconds");
+    expect(attempts).toBe(1);
+    await expect(page.locator('#extractBtn')).toBeEnabled();
+  });
+
+  test('a response within the limit succeeds', async ({ page }) => {
+    await page.evaluate(() => { CONFIG.timeoutMs = 5000; });
+    await page.route('**/generativelanguage.googleapis.com/**', async route => {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"name":"On Time","ingredients":"i","directions":"d"}' }] } }] })
+      });
+    });
+
+    await page.locator('#extractBtn').click();
+    await expect.poll(() => page.evaluate(() => window.extractedRecipe?.name)).toBe('On Time');
+  });
+});
