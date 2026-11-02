@@ -182,6 +182,27 @@ test.describe('Take Photo Camera Feature', () => {
     await expect(page.locator('.camera-modal-close')).toHaveAttribute('aria-label', /.+/);
   });
 
+  test('starts the preview explicitly, muted (iOS may not autoplay a camera stream)', async ({ page }) => {
+    await page.evaluate(() => {
+      window.__playCalls = 0;
+      const original = HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play = function () {
+        if (this.id === 'cameraVideo') window.__playCalls++;
+        return original.call(this);
+      };
+    });
+
+    await openCameraReady(page);
+    expect(await page.evaluate(() => window.__playCalls)).toBe(1);
+    expect(await page.locator('#cameraVideo').evaluate(v => v.muted)).toBe(true);
+    expect(await page.locator('#cameraVideo').evaluate(v => v.paused)).toBe(false);
+
+    // Switching cameras starts the new stream too
+    await page.locator('#cameraSwitchBtn').click();
+    await expect.poll(() => page.evaluate(() => window.__playCalls)).toBe(2);
+    expect(await page.locator('#cameraVideo').evaluate(v => v.paused)).toBe(false);
+  });
+
   test('Done is hidden until a photo is taken', async ({ page }) => {
     await openCameraReady(page);
     const doneBtn = page.locator('#cameraDoneBtn');

@@ -1039,7 +1039,7 @@
 
                             <!-- Video preview container -->
                             <div class="camera-video-container">
-                                <video id="cameraVideo" autoplay playsinline></video>
+                                <video id="cameraVideo" autoplay playsinline muted></video>
 
                                 <!-- Camera error message (hidden by default) -->
                                 <div id="cameraError" class="camera-error" style="display: none;">
@@ -1170,6 +1170,20 @@
         window.extractedRecipe = null;
 
         /**
+         * Shows a camera stream in the preview. iOS Safari doesn't always start
+         * a camera stream from the autoplay attribute alone, leaving the preview
+         * blank, so playback is started explicitly. (The video is muted so
+         * play() is always allowed.)
+         */
+        function showStream(video, stream) {
+            video.srcObject = stream;
+            const playing = video.play();
+            if (playing && playing.catch) {
+                playing.catch(error => console.warn('Camera preview did not start:', error));
+            }
+        }
+
+        /**
          * Opens camera modal and requests camera access
          * Handles permissions, initializes video stream, and detects multiple cameras
          */
@@ -1227,7 +1241,7 @@
                 }
 
                 window.cameraState.stream = stream;
-                video.srcObject = stream;
+                showStream(video, stream);
 
                 // Detect if device has multiple cameras (for camera switch button)
                 const devices = await navigator.mediaDevices.enumerateDevices();
@@ -1342,7 +1356,7 @@
                 }
                 window.cameraState.stream = stream;
                 window.cameraState.facingMode = mode;
-                video.srcObject = stream;
+                showStream(video, stream);
                 return true;
             };
 
