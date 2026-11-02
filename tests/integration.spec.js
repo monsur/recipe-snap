@@ -1,4 +1,6 @@
 const { test, expect } = require('@playwright/test');
+const fs = require('fs');
+const zlib = require('zlib');
 const { expandStep, stubClipboard, readStubClipboard, collectDialogs, fastRetries } = require('./helpers');
 
 test.describe('End-to-End Integration Tests', () => {
@@ -58,22 +60,24 @@ test.describe('End-to-End Integration Tests', () => {
 
     // Click extract
     await page.locator('#step2 .btn-primary').click();
-    await page.waitForTimeout(1500);
 
-    // Step 4: Verify recipe is displayed in editor
-    const editorContent = await page.locator('#step3 textarea').inputValue();
+    // Step 4: Step 3 opens with the success message and the extracted recipe
+    await expect(page.locator('#extractionStatus')).toBeVisible();
+    await expect(page.locator('#extractionStatus')).toContainText('Recipe extracted successfully');
+    await expect(page.locator('#step3')).not.toHaveClass(/collapsed/);
+    await expect(page.locator('#step2')).toHaveClass(/collapsed/);
 
-    // Should have some content (once implemented)
-    expect(typeof editorContent).toBe('string');
+    const editorContent = await page.locator('#recipeEditor').inputValue();
+    expect(JSON.parse(editorContent)).toEqual(mockRecipe);
 
-    // Step 5: Test download
-    const downloadPromise = page.waitForEvent('download', { timeout: 5000 }).catch(() => null);
+    // Step 5: Download produces a gzipped .paprikarecipe holding the same recipe
+    const downloadPromise = page.waitForEvent('download', { timeout: 5000 });
     await page.locator('#step3 .btn-primary').filter({ hasText: /Download/ }).click();
-
     const download = await downloadPromise;
-    if (download) {
-      expect(download.suggestedFilename()).toMatch(/\.paprikarecipe$/);
-    }
+
+    expect(download.suggestedFilename()).toMatch(/lasagna.*\.paprikarecipe$/i);
+    const downloaded = JSON.parse(zlib.gunzipSync(fs.readFileSync(await download.path())).toString('utf8'));
+    expect(downloaded).toEqual(mockRecipe);
   });
 
   test('workflow with custom model and prompt', async ({ page }) => {
@@ -489,5 +493,45 @@ test.describe('Clear all data', () => {
 
     await expect(page.locator('#recipeEditor')).toHaveValue('{"name":"Keep"}');
     expect(await page.evaluate(() => localStorage.getItem('geminiApiKey'))).toBe('key');
+  });
+});
+
+test.describe('Extraction success status', () => {
+  const recipe = { name: 'Status Test', ingredients: 'flour', directions: ['Mix'] };
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem('geminiApiKey', 'test-key');
+      window.uploadedImages = ['data:image/jpeg;base64,test'];
+    });
+  });
+
+  function mockGemini(page, status, body) {
+    return page.route('**/generativelanguage.googleapis.com/**', route =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) }));
+  }
+
+  test('is hidden before any extraction', async ({ page }) => {
+    await expect(page.locator('#extractionStatus')).toBeHidden();
+  });
+
+  test('is shown after a successful extraction', async ({ page }) => {
+    await mockGemini(page, 200, { candidates: [{ content: { parts: [{ text: JSON.stringify(recipe) }] } }] });
+    await expandStep(page, 'step2');
+    await page.locator('#extractBtn').click();
+
+    await expect(page.locator('#extractionStatus')).toBeVisible();
+  });
+
+  test('stays hidden when extraction fails', async ({ page }) => {
+    const dialogs = collectDialogs(page);
+    await mockGemini(page, 400, { error: { message: 'Bad request', status: 'INVALID_ARGUMENT' } });
+    await expandStep(page, 'step2');
+    await page.locator('#extractBtn').click();
+
+    await expect.poll(() => dialogs.length).toBe(1);
+    await expect(page.locator('#extractionStatus')).toBeHidden();
   });
 });
