@@ -336,3 +336,27 @@ test.describe('Copy button feedback', () => {
     await expect(copyBtn).not.toContainText('Copied!');
   });
 });
+
+test.describe('Download URL lifetime', () => {
+  test('keeps the download URL alive after the click, then revokes it', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => {
+      CONFIG.downloadUrlLifetimeMs = 1000;
+      window.__revoked = [];
+      const original = URL.revokeObjectURL.bind(URL);
+      URL.revokeObjectURL = (url) => { window.__revoked.push(url); original(url); };
+      document.getElementById('recipeEditor').value = '{"name":"Lifetime"}';
+    });
+    await expandStep(page, 'step3');
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.locator('#step3 .btn-primary').filter({ hasText: /Download/ }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe('Lifetime.paprikarecipe');
+
+    // Not revoked right away...
+    expect(await page.evaluate(() => window.__revoked.length)).toBe(0);
+    // ...but cleaned up after the lifetime
+    await expect.poll(() => page.evaluate(() => window.__revoked.length), { timeout: 3000 }).toBe(1);
+  });
+});

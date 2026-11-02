@@ -1626,6 +1626,8 @@
                 source: '',
                 prompt: `Analyze the provided image(s) and extract the recipe. The images may be out of order.`
             },
+            // How long a downloaded file's blob URL stays valid
+            downloadUrlLifetimeMs: 60000,
             // Maximum time to wait for each Gemini request
             timeoutMs: 90000,
             // Retries for temporary failures (rate limits, server errors, bad JSON)
@@ -2048,7 +2050,10 @@
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+
+            // Revoking immediately can cancel the download in some browsers
+            // (notably Safari), so keep the URL alive for a while
+            setTimeout(() => URL.revokeObjectURL(url), CONFIG.downloadUrlLifetimeMs);
 
             console.log(`Downloaded recipe as ${filename}`);
         }
