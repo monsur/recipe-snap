@@ -61,20 +61,6 @@ test.describe('Step 2: Upload - Image Handling', () => {
     await expect(previewGrid).not.toBeVisible();
   });
 
-  test('should handle file input change event', async ({ page }) => {
-    // Wait for the page to be fully loaded
-    await page.waitForLoadState('networkidle');
-
-    // Check if file input handler is defined (once implemented)
-    const hasFileInputHandler = await page.evaluate(() => {
-      return typeof window.handleFileUpload === 'function';
-    });
-
-    // This will fail until the functionality is implemented
-    // which is expected for TDD
-    expect(typeof hasFileInputHandler).toBe('boolean');
-  });
-
   test('should store uploaded images in memory', async ({ page }) => {
     // Expand step 2
     await page.locator('#step2 .step-header').click();
@@ -199,32 +185,6 @@ test.describe('Step 2: Upload - Image Handling', () => {
 
     // Verify preview grid is hidden
     await expect(page.locator('#previewGrid')).not.toBeVisible();
-  });
-
-  test('should show loading state during image processing', async ({ page }) => {
-    // Check if status/loading indicators exist
-    const statusElements = page.locator('.status, .loading, [data-status]');
-    const count = await statusElements.count();
-    expect(count).toBeGreaterThanOrEqual(0);
-  });
-
-  test('should accept multiple images', async ({ page }) => {
-    // Verify the file input allows multiple files (once implemented)
-    const hasMultipleAttr = await page.evaluate(() => {
-      const input = document.querySelector('input[type="file"]');
-      return input ? input.hasAttribute('multiple') || input.multiple : false;
-    });
-
-    expect(typeof hasMultipleAttr).toBe('boolean');
-  });
-
-  test('should validate file types', async ({ page }) => {
-    // Check for file type validation
-    const hasValidation = await page.evaluate(() => {
-      return typeof window.validateFileType === 'function';
-    });
-
-    expect(typeof hasValidation).toBe('boolean');
   });
 
   test('should show preview grid after uploading images', async ({ page }) => {

@@ -179,44 +179,6 @@ test.describe('Step 3: Download - Recipe Export', () => {
     }
   });
 
-  test('should validate JSON before download', async ({ page }) => {
-    // Expand step 3
-    await page.locator('#step3 .step-header').click();
-
-    // Put invalid JSON in editor
-    const editor = page.locator('#step3 textarea');
-    await editor.fill('{ invalid json }');
-
-    let errorShown = false;
-    page.on('dialog', async dialog => {
-      if (dialog.message().toLowerCase().includes('invalid') ||
-          dialog.message().toLowerCase().includes('error')) {
-        errorShown = true;
-      }
-      await dialog.accept();
-    });
-
-    const downloadBtn = page.locator('#step3 .btn-primary').filter({ hasText: /Download/ });
-    await downloadBtn.click();
-
-    await page.waitForTimeout(500);
-
-    // Should validate (once implemented)
-    expect(typeof errorShown).toBe('boolean');
-  });
-
-  test('should show success status after successful extraction', async ({ page }) => {
-    await page.evaluate(() => {
-      window.extractedRecipe = { name: 'Test' };
-    });
-
-    // Look for success status indicator
-    const statusElements = page.locator('.status').filter({ hasText: /success|extracted|complete/i });
-    const count = await statusElements.count();
-
-    expect(count).toBeGreaterThanOrEqual(0);
-  });
-
   test('should preserve user edits when downloading', async ({ page }) => {
     const editor = page.locator('#step3 textarea');
     const customRecipe = '{"name":"Custom Edited Recipe","ingredients":"flour"}';
