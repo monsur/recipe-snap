@@ -1518,8 +1518,8 @@
             } catch (error) {
                 console.error('Error processing captured photos:', error);
                 alert('Failed to process photos. Please try again.');
-
-                // Restore button state
+            } finally {
+                // Restore button state so the next camera session starts clean
                 doneBtn.innerHTML = originalContent;
                 doneBtn.disabled = false;
             }

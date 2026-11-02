@@ -393,4 +393,28 @@ test.describe('Take Photo Camera Feature', () => {
     const cameraModal = page.locator('#cameraModal');
     await expect(cameraModal).not.toBeVisible();
   });
+  test('should reset Done button after processing so the next session can submit', async ({ page }) => {
+    // Seed a captured photo directly (bypasses the mocked video stream)
+    const runSession = () => page.evaluate(async () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+      canvas.getContext('2d').fillRect(0, 0, 100, 100);
+      window.cameraState.capturedPhotos = [canvas.toDataURL('image/jpeg')];
+      await processCapturedPhotos();
+    });
+
+    await runSession();
+
+    const doneBtn = page.locator('#cameraDoneBtn');
+    await expect(doneBtn).toBeEnabled();
+    await expect(doneBtn).not.toContainText('Processing');
+    await expect(doneBtn.locator('polyline')).toHaveCount(1);
+
+    // Second session (e.g. after "Start New Recipe") should also work
+    await page.evaluate(() => { window.uploadedImages = []; });
+    await runSession();
+    expect(await page.evaluate(() => window.uploadedImages.length)).toBe(1);
+    await expect(doneBtn).toBeEnabled();
+  });
 });
