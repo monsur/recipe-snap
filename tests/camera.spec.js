@@ -288,3 +288,94 @@ test.describe('Closing the camera while it is starting', () => {
     await expect(page.locator('#cameraModal')).toBeVisible();
   });
 });
+
+test.describe('Switching cameras', () => {
+  test.beforeEach(async ({ page }) => {
+    // Fake front/back cameras. Modes listed in window.__failingModes reject.
+    // Every stream handed out is recorded with its mode in window.__streams.
+    await page.addInitScript(() => {
+      window.__failingModes = [];
+      window.__gumDelay = 0;
+      window.__streams = [];
+      MediaDevices.prototype.getUserMedia = (constraints) => new Promise((resolve, reject) => {
+        const mode = constraints.video.facingMode;
+        setTimeout(() => {
+          if (window.__failingModes.includes(mode)) {
+            const err = new Error(`${mode} camera unavailable`);
+            err.name = 'NotReadableError';
+            reject(err);
+            return;
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = 64;
+          canvas.height = 48;
+          const ctx = canvas.getContext('2d');
+          setInterval(() => ctx.fillRect(0, 0, 64, 48), 50);
+          const stream = canvas.captureStream(10);
+          window.__streams.push({ mode, stream });
+          resolve(stream);
+        }, window.__gumDelay);
+      });
+      MediaDevices.prototype.enumerateDevices = async () => [
+        { kind: 'videoinput', deviceId: 'front', label: 'Front' },
+        { kind: 'videoinput', deviceId: 'back', label: 'Back' }
+      ];
+    });
+    await page.goto('/');
+    await page.locator('#step2 .step-header').click();
+    await page.locator('#takePhotoBtn').click();
+    await expect(page.locator('#cameraSwitchBtn')).toBeVisible();
+  });
+
+  const streams = page => page.evaluate(() => window.__streams.map(s => ({
+    mode: s.mode,
+    state: s.stream.getVideoTracks()[0].readyState,
+    attached: document.getElementById('cameraVideo').srcObject === s.stream
+  })));
+
+  test('switches to the other camera and releases the old one', async ({ page }) => {
+    await page.locator('#cameraSwitchBtn').click();
+    await expect.poll(() => page.evaluate(() => window.cameraState.facingMode)).toBe('user');
+
+    expect(await streams(page)).toEqual([
+      { mode: 'environment', state: 'ended', attached: false },
+      { mode: 'user', state: 'live', attached: true }
+    ]);
+    await expect(page.locator('#cameraError')).toBeHidden();
+  });
+
+  test('falls back to the previous camera when the switch fails', async ({ page }) => {
+    await page.evaluate(() => { window.__failingModes = ['user']; });
+    await page.locator('#cameraSwitchBtn').click();
+
+    await expect.poll(async () => (await streams(page)).length).toBe(2);
+    expect(await page.evaluate(() => window.cameraState.facingMode)).toBe('environment');
+    expect(await streams(page)).toEqual([
+      { mode: 'environment', state: 'ended', attached: false },
+      { mode: 'environment', state: 'live', attached: true }
+    ]);
+    // Preview stays usable; the switch that doesn't work is hidden
+    await expect(page.locator('#cameraError')).toBeHidden();
+    await expect(page.locator('#cameraSwitchBtn')).toBeHidden();
+  });
+
+  test('shows an error if neither camera can be opened', async ({ page }) => {
+    await page.evaluate(() => { window.__failingModes = ['user', 'environment']; });
+    await page.locator('#cameraSwitchBtn').click();
+
+    await expect(page.locator('#cameraError')).toBeVisible();
+    await expect(page.locator('#cameraErrorMessage')).toContainText('Failed to switch camera');
+    expect(await page.evaluate(() => window.cameraState.facingMode)).toBe('environment');
+    expect(await page.evaluate(() => window.cameraState.stream)).toBeNull();
+  });
+
+  test('releases the new stream if the camera is closed mid-switch', async ({ page }) => {
+    await page.evaluate(() => { window.__gumDelay = 600; });
+    await page.locator('#cameraSwitchBtn').click();
+    await page.locator('.camera-modal-close').click();
+
+    await expect.poll(async () => (await streams(page)).length).toBe(2);
+    expect((await streams(page)).map(s => s.state)).toEqual(['ended', 'ended']);
+    expect(await page.evaluate(() => window.cameraState.stream)).toBeNull();
+  });
+});

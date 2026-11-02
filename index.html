@@ -1335,38 +1335,64 @@
             switchBtn.innerHTML = '<span class="loading-spinner"></span>';
             switchBtn.disabled = true;
 
+            const session = window.cameraState.session;
+            const previousMode = window.cameraState.facingMode;
+            const nextMode = previousMode === 'user' ? 'environment' : 'user';
+            const requestCamera = mode => navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: mode,
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 }
+                },
+                audio: false
+            });
+
+            // Attaches a stream unless the camera was closed meanwhile
+            const attach = (stream, mode) => {
+                if (session !== window.cameraState.session) {
+                    stream.getTracks().forEach(track => track.stop());
+                    return false;
+                }
+                window.cameraState.stream = stream;
+                window.cameraState.facingMode = mode;
+                video.srcObject = stream;
+                return true;
+            };
+
             try {
-                // Stop current stream
+                // Stop the current stream first: some devices can't run two cameras at once
                 if (window.cameraState.stream) {
                     window.cameraState.stream.getTracks().forEach(track => track.stop());
+                    window.cameraState.stream = null;
                 }
 
-                // Toggle facing mode
-                window.cameraState.facingMode = window.cameraState.facingMode === 'user' ? 'environment' : 'user';
+                try {
+                    if (attach(await requestCamera(nextMode), nextMode)) {
+                        errorContainer.style.display = 'none';
+                        console.log(`Switched to ${nextMode} camera`);
+                    }
+                } catch (error) {
+                    console.error('Camera switch error:', error);
 
-                // Request new stream with toggled camera
-                const constraints = {
-                    video: {
-                        facingMode: window.cameraState.facingMode,
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 }
-                    },
-                    audio: false
-                };
+                    // Go back to the camera we had, so the preview isn't left blank
+                    let restored = false;
+                    try {
+                        restored = attach(await requestCamera(previousMode), previousMode);
+                    } catch (restoreError) {
+                        console.error('Could not restore previous camera:', restoreError);
+                    }
 
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                window.cameraState.stream = stream;
-                video.srcObject = stream;
-
-                errorContainer.style.display = 'none';
-
-                console.log(`Switched to ${window.cameraState.facingMode} camera`);
-
-            } catch (error) {
-                console.error('Camera switch error:', error);
-                errorContainer.style.display = 'flex';
-                document.getElementById('cameraErrorMessage').textContent =
-                    'Failed to switch camera. ' + (error.message || 'Please try again.');
+                    if (restored) {
+                        // Previous camera works; that one doesn't, so stop offering the switch.
+                        // (The error overlay would cover the working preview.)
+                        switchBtn.style.display = 'none';
+                    } else if (session === window.cameraState.session) {
+                        video.srcObject = null;
+                        errorContainer.style.display = 'flex';
+                        document.getElementById('cameraErrorMessage').textContent =
+                            'Failed to switch camera. ' + (error.message || 'Please try again.');
+                    }
+                }
             } finally {
                 // Restore button
                 switchBtn.innerHTML = originalContent;
