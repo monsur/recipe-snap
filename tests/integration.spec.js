@@ -77,7 +77,13 @@ test.describe('End-to-End Integration Tests', () => {
 
     expect(download.suggestedFilename()).toMatch(/lasagna.*\.paprikarecipe$/i);
     const downloaded = JSON.parse(zlib.gunzipSync(fs.readFileSync(await download.path())).toString('utf8'));
-    expect(downloaded).toEqual(mockRecipe);
+    const { photo, photo_data, photo_hash, ...recipeOnly } = downloaded;
+    expect(recipeOnly).toEqual(mockRecipe);
+
+    // The one uploaded photo becomes the main photo; no gallery for a single photo
+    expect(photo).toMatch(/^[0-9A-F-]{36}\.jpg$/);
+    expect(photo_data).toBeTruthy();
+    expect(photo_hash).toMatch(/^[0-9A-F]{64}$/);
   });
 
   test('workflow with custom model and prompt', async ({ page }) => {

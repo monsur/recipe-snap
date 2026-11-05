@@ -1204,6 +1204,9 @@
         // Global state for extracted recipe
         window.extractedRecipe = null;
 
+        // The photos the current recipe was extracted from (added to the download)
+        window.extractedPhotos = [];
+
         /**
          * Shows a camera stream in the preview. iOS Safari doesn't always start
          * a camera stream from the autoplay attribute alone, leaving the preview
@@ -1634,7 +1637,9 @@ Rules:
             // longest side. Images are encoded at most once, at this quality.
             image: {
                 maxSize: 1600,
-                jpegQuality: 0.92
+                jpegQuality: 0.92,
+                // Paprika's main recipe photo is a small square thumbnail
+                thumbnailSize: 280
             },
             // How long a downloaded file's blob URL stays valid
             downloadUrlLifetimeMs: 60000,
@@ -1973,6 +1978,7 @@ Rules:
 
                 // 9. Store in global state
                 window.extractedRecipe = recipeJson;
+                window.extractedPhotos = [...window.uploadedImages];
 
                 // 11. Display in editor
                 displayRecipeInEditor(recipeJson);
@@ -2020,6 +2026,78 @@ Rules:
             console.log('Recipe displayed in editor');
         }
 
+        /** Returns the base64 part of a data URL */
+        function base64FromDataUrl(dataUrl) {
+            return dataUrl.split(',')[1];
+        }
+
+        /** A new photo filename in Paprika's style: an uppercase UUID plus .jpg */
+        function newPhotoFilename() {
+            const id = crypto.randomUUID
+                ? crypto.randomUUID()
+                : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c =>
+                    (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16));
+            return `${id.toUpperCase()}.jpg`;
+        }
+
+        /** Uppercase hex SHA-256 of base64-encoded bytes, as Paprika uses for photo_hash */
+        async function sha256OfBase64(base64) {
+            const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+            const digest = await crypto.subtle.digest('SHA-256', bytes);
+            return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+        }
+
+        /** Crops the centre square of an image and scales it to the thumbnail size */
+        function makeThumbnail(dataUrl) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => {
+                    const side = Math.min(img.naturalWidth, img.naturalHeight);
+                    const size = CONFIG.image.thumbnailSize;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = size;
+                    canvas.height = size;
+                    canvas.getContext('2d').drawImage(
+                        img,
+                        (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side,
+                        0, 0, size, size
+                    );
+                    resolve(canvas.toDataURL('image/jpeg', CONFIG.image.jpegQuality));
+                };
+                img.onerror = () => reject(new Error('Failed to load photo for thumbnail'));
+                img.src = dataUrl;
+            });
+        }
+
+        /**
+         * Adds the photos to a recipe in the layout Paprika imports (tested by
+         * importing sample files into Paprika):
+         * - main photo: a square thumbnail of the first photo (photo, photo_data, photo_hash)
+         * - with 2+ photos, every photo also goes in the gallery (photos)
+         * There is no photo_large: Paprika's own exports have it, but it isn't needed.
+         */
+        async function addPhotosForPaprika(recipe, photos) {
+            const result = { ...recipe };
+            ['photo', 'photo_data', 'photo_hash', 'photo_large', 'photos'].forEach(key => delete result[key]);
+            if (!photos || photos.length === 0) {
+                return result;
+            }
+
+            const thumbnail = base64FromDataUrl(await makeThumbnail(photos[0]));
+            result.photo = newPhotoFilename();
+            result.photo_data = thumbnail;
+            result.photo_hash = await sha256OfBase64(thumbnail);
+
+            if (photos.length > 1) {
+                result.photos = photos.map((photo, index) => ({
+                    name: String(index + 1),
+                    filename: newPhotoFilename(),
+                    data: base64FromDataUrl(photo)
+                }));
+            }
+            return result;
+        }
+
         /**
          * Downloads the recipe as a .paprikarecipe file
          */
@@ -2054,8 +2132,18 @@ Rules:
                 // Use default filename if parsing fails
             }
 
+            // Add the photos to the file only, so they never fill the editor.
+            // If that fails, still download the recipe without them.
+            let fileJson = jsonText;
+            try {
+                const withPhotos = await addPhotosForPaprika(JSON.parse(jsonText), window.extractedPhotos);
+                fileJson = JSON.stringify(withPhotos);
+            } catch (error) {
+                console.error('Could not add photos to the download:', error);
+            }
+
             // Gzip-compress the JSON (.paprikarecipe format is gzip-compressed JSON)
-            const encoded = new TextEncoder().encode(jsonText);
+            const encoded = new TextEncoder().encode(fileJson);
             const cs = new CompressionStream('gzip');
             const writer = cs.writable.getWriter();
             writer.write(encoded);
@@ -2506,6 +2594,7 @@ Rules:
         function resetRecipe() {
             window.uploadedImages = [];
             window.extractedRecipe = null;
+            window.extractedPhotos = [];
             updatePreviewGrid();
             document.getElementById('recipeEditor').value = '';
             document.getElementById('extractionStatus').style.display = 'none';

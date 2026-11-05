@@ -240,21 +240,6 @@ test.describe('Step 3: Download - Recipe Export', () => {
     expect(buf[1]).toBe(0x8b);
   });
 
-  test('should not include photos or photo_data fields in recipe JSON', async ({ page }) => {
-    // The editor content is exactly what gets zipped — check it directly
-    const recipe = { name: 'No Photos Recipe', ingredients: 'butter', directions: ['Melt butter'] };
-
-    await page.evaluate((r) => {
-      const editor = document.querySelector('#step3 textarea');
-      if (editor) editor.value = JSON.stringify(r, null, 2);
-    }, recipe);
-
-    const editorContent = await page.locator('#step3 textarea').inputValue();
-    const json = JSON.parse(editorContent);
-
-    expect(json.photos).toBeUndefined();
-    expect(json.photo_data).toBeUndefined();
-  });
 });
 
 test.describe('Copy button feedback', () => {
@@ -299,5 +284,160 @@ test.describe('Download URL lifetime', () => {
     expect(await page.evaluate(() => window.__revoked.length)).toBe(0);
     // ...but cleaned up after the lifetime
     await expect.poll(() => page.evaluate(() => window.__revoked.length), { timeout: 3000 }).toBe(1);
+  });
+});
+
+test.describe('Photos in the Paprika download', () => {
+  const crypto = require('crypto');
+  const zlib = require('zlib');
+  const recipe = { name: 'Photo Recipe', ingredients: 'flour', directions: '1. Mix' };
+  const PHOTO_FIELDS = ['photo', 'photo_data', 'photo_hash', 'photo_large', 'photos'];
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => localStorage.clear());
+  });
+
+  // Makes a JPEG data URL of the given size: left half red, right half blue,
+  // so a centre crop can be told apart from the whole image
+  const makePhoto = (page, width, height) => page.evaluate(([w, h]) => {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#d00';
+    ctx.fillRect(0, 0, w / 2, h);
+    ctx.fillStyle = '#00d';
+    ctx.fillRect(w / 2, 0, w / 2, h);
+    return c.toDataURL('image/jpeg', 0.9);
+  }, [width, height]);
+
+  // Puts a recipe in the editor with the given photos, as after an extraction
+  async function setUpRecipe(page, photos) {
+    await page.evaluate(([r, p]) => {
+      window.extractedRecipe = r;
+      window.extractedPhotos = p;
+      displayRecipeInEditor(r);
+    }, [recipe, photos]);
+    await expandStep(page, 'step3');
+  }
+
+  async function downloadFile(page) {
+    const downloadPromise = page.waitForEvent('download');
+    await page.locator('#step3 .btn-primary').filter({ hasText: /Download/ }).click();
+    const download = await downloadPromise;
+    return JSON.parse(zlib.gunzipSync(fs.readFileSync(await download.path())).toString('utf8'));
+  }
+
+  const imageSize = (page, base64) => page.evaluate(src => new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve([img.naturalWidth, img.naturalHeight]);
+    img.src = src;
+  }), `data:image/jpeg;base64,${base64}`);
+
+  const sha256 = base64 => crypto.createHash('sha256').update(Buffer.from(base64, 'base64')).digest('hex').toUpperCase();
+
+  test('no photos: the file has no photo fields', async ({ page }) => {
+    await setUpRecipe(page, []);
+    const file = await downloadFile(page);
+    expect(file).toEqual(recipe);
+  });
+
+  test('one photo: a square thumbnail as the main photo, and no gallery', async ({ page }) => {
+    const photo = await makePhoto(page, 1200, 1600);
+    await setUpRecipe(page, [photo]);
+    const file = await downloadFile(page);
+
+    expect(file.photo).toMatch(/^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\.jpg$/);
+    expect(file.photo_data.startsWith('/9j/')).toBe(true); // JPEG
+    expect(await imageSize(page, file.photo_data)).toEqual([280, 280]);
+    expect(file.photo_hash).toBe(sha256(file.photo_data));
+    expect(file.photos).toBeUndefined();
+    expect(file.photo_large).toBeUndefined();
+  });
+
+  test('the thumbnail is the centre of the photo, not the whole photo squashed', async ({ page }) => {
+    // Left half red, right half blue: the centre crop of a wide image still
+    // has both colours, split down the middle
+    const photo = await makePhoto(page, 1600, 800);
+    await setUpRecipe(page, [photo]);
+    const file = await downloadFile(page);
+
+    const [left, right] = await page.evaluate(src => new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = img.width;
+        c.height = img.height;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        resolve([ctx.getImageData(70, 140, 1, 1).data[0], ctx.getImageData(210, 140, 1, 1).data[2]]);
+      };
+      img.src = src;
+    }), `data:image/jpeg;base64,${file.photo_data}`);
+    expect(left).toBeGreaterThan(150);  // red on the left
+    expect(right).toBeGreaterThan(150); // blue on the right
+  });
+
+  test('several photos: main thumbnail plus every photo in the gallery, unchanged', async ({ page }) => {
+    const photos = [await makePhoto(page, 1200, 1600), await makePhoto(page, 1600, 1200), await makePhoto(page, 800, 600)];
+    await setUpRecipe(page, photos);
+    const file = await downloadFile(page);
+
+    expect(await imageSize(page, file.photo_data)).toEqual([280, 280]);
+    expect(file.photos.map(p => p.name)).toEqual(['1', '2', '3']);
+    expect(file.photos.map(p => p.data)).toEqual(photos.map(p => p.split(',')[1]));
+    const filenames = file.photos.map(p => p.filename).concat(file.photo);
+    expect(new Set(filenames).size).toBe(4);
+    filenames.forEach(f => expect(f).toMatch(/^[0-9A-F-]{36}\.jpg$/));
+    // photo_large made Paprika drop gallery photos in import tests
+    expect(file.photo_large).toBeUndefined();
+  });
+
+  test('photos never appear in the editor or in the copied text', async ({ page }) => {
+    await stubClipboard(page);
+    await setUpRecipe(page, [await makePhoto(page, 400, 400), await makePhoto(page, 400, 400)]);
+
+    const editor = JSON.parse(await page.locator('#recipeEditor').inputValue());
+    await page.locator('#step3 button').filter({ hasText: /Copy/ }).click();
+    await expect.poll(() => readStubClipboard(page)).not.toBeNull();
+    const copied = JSON.parse(await readStubClipboard(page));
+
+    for (const json of [editor, copied]) {
+      PHOTO_FIELDS.forEach(key => expect(json[key]).toBeUndefined());
+    }
+  });
+
+  test('the download uses the photos the recipe was extracted from', async ({ page }) => {
+    await page.evaluate(() => localStorage.setItem('geminiApiKey', 'key'));
+    await page.route('**/generativelanguage.googleapis.com/**', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(recipe) }] } }] })
+    }));
+    const photos = [await makePhoto(page, 400, 300), await makePhoto(page, 300, 400)];
+    await page.evaluate(p => { window.uploadedImages = [...p]; }, photos);
+    await expandStep(page, 'step2');
+    await page.locator('#extractBtn').click();
+    await expect(page.locator('#extractionStatus')).toBeVisible();
+
+    // A photo added after extraction isn't part of this recipe
+    const extra = await makePhoto(page, 500, 500);
+    await page.evaluate(p => { window.uploadedImages.push(p); }, extra);
+
+    const file = await downloadFile(page);
+    expect(file.photos.map(p => p.data)).toEqual(photos.map(p => p.split(',')[1]));
+  });
+
+  test('starting a new recipe forgets the old photos', async ({ page }) => {
+    await setUpRecipe(page, [await makePhoto(page, 400, 400)]);
+    await page.locator('.btn-reset').click();
+    expect(await page.evaluate(() => window.extractedPhotos)).toEqual([]);
+  });
+
+  test('if the photos cannot be added, the recipe still downloads without them', async ({ page }) => {
+    await setUpRecipe(page, ['data:image/jpeg;base64,bm90IGFuIGltYWdl']); // "not an image"
+    const file = await downloadFile(page);
+    expect(file).toEqual(recipe);
   });
 });
