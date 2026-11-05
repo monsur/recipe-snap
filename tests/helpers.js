@@ -53,4 +53,15 @@ async function fastRetries(page) {
   await page.evaluate(() => { CONFIG.retry.baseDelayMs = 1; });
 }
 
-module.exports = { expandStep, stubClipboard, readStubClipboard, collectDialogs, fastRetries };
+/**
+ * Clicks "Clear all data". Under test automation Firefox sometimes receives
+ * the mouse press on this link but never fires the click (about 1 run in 20),
+ * so the click event is sent directly once the link is visible.
+ */
+async function clickClearAllData(page) {
+  const link = page.locator('.clear-data-link');
+  await expect(link).toBeVisible();
+  await link.dispatchEvent('click');
+}
+
+module.exports = { expandStep, stubClipboard, readStubClipboard, collectDialogs, fastRetries, clickClearAllData };

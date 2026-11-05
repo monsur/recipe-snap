@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const zlib = require('zlib');
-const { expandStep, stubClipboard, readStubClipboard, collectDialogs, fastRetries } = require('./helpers');
+const { expandStep, stubClipboard, readStubClipboard, collectDialogs, fastRetries, clickClearAllData } = require('./helpers');
 
 test.describe('End-to-End Integration Tests', () => {
   test.beforeEach(async ({ page }) => {
@@ -241,7 +241,7 @@ test.describe('End-to-End Integration Tests', () => {
 
     // Saving collapsed step 1; reopen it to reach the clear-data link
     await expandStep(page, 'step1');
-    await page.locator('.clear-data-link').click();
+    await clickClearAllData(page);
 
     await expect.poll(() => page.evaluate(() => localStorage.getItem('geminiApiKey'))).toBeNull();
     await expect(page.locator('#apiKey')).toHaveValue('');
@@ -468,7 +468,7 @@ test.describe('Clear all data', () => {
     page.on('dialog', d => d.accept());
     await expandStep(page, 'step1');
     await page.locator('.advanced-toggle').click();
-    await page.locator('.clear-data-link').click();
+    await clickClearAllData(page);
 
     await expect(page.locator('#recipeEditor')).toHaveValue('');
     await expect(page.locator('#extractionStatus')).toBeHidden();
@@ -489,7 +489,7 @@ test.describe('Clear all data', () => {
 
     page.on('dialog', d => d.dismiss());
     await page.locator('.advanced-toggle').click();
-    await page.locator('.clear-data-link').click();
+    await clickClearAllData(page);
 
     await expect(page.locator('#recipeEditor')).toHaveValue('{"name":"Keep"}');
     expect(await page.evaluate(() => localStorage.getItem('geminiApiKey'))).toBe('key');

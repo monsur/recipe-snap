@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { expandStep } = require('./helpers');
+const { expandStep, clickClearAllData } = require('./helpers');
 
 test.describe('Step 1: Setup - API Key Management', () => {
   test.beforeEach(async ({ page }) => {
@@ -128,7 +128,7 @@ test.describe('Step 1: Setup - API Key Management', () => {
     page.on('dialog', dialog => dialog.accept());
 
     // Click clear data (advanced options should now be open)
-    await page.locator('.clear-data-link').click();
+    await clickClearAllData(page);
 
     // Verify localStorage is cleared
     storedKey = await page.evaluate(() => localStorage.getItem('geminiApiKey'));
@@ -236,7 +236,7 @@ test.describe('Step 1: Setup - API Key Management', () => {
     await page.locator('.advanced-toggle').click();
 
     page.on('dialog', dialog => dialog.accept());
-    await page.locator('.clear-data-link').click();
+    await clickClearAllData(page);
 
     await expect(page.locator('#source')).toHaveValue('');
     const storedSource = await page.evaluate(() => localStorage.getItem('source'));
@@ -379,9 +379,14 @@ test.describe('Phone layout', () => {
 
   test('Take Photo and Upload Photos sit side by side', async ({ page }) => {
     await expandStep(page, 'step2');
+    // Wait for the step's expand animation to finish before measuring
+    await expect.poll(async () => {
+      const take = await page.locator('#takePhotoBtn').boundingBox();
+      const upload = await page.locator('#uploadBtn').boundingBox();
+      return Math.round(take.y) === Math.round(upload.y);
+    }).toBe(true);
     const take = await page.locator('#takePhotoBtn').boundingBox();
     const upload = await page.locator('#uploadBtn').boundingBox();
-    expect(Math.round(take.y)).toBe(Math.round(upload.y));
     expect(take.x + take.width).toBeLessThanOrEqual(upload.x);
     expect(upload.x + upload.width).toBeLessThanOrEqual(393);
   });

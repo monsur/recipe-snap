@@ -217,13 +217,13 @@ test.describe('Take Photo Camera Feature', () => {
 
     await openCameraReady(page);
     await expectPreviewFillsBox();
+    const firstOpen = await rect('.camera-video-container');
 
     // Thumbnails take space from the preview, not from the buttons
     await capture(page, 1);
     await expectPreviewFillsBox();
 
-    // Reopening gives the same layout as the first time
-    const firstOpen = await rect('.camera-video-container');
+    // Reopening (with no photos yet) gives the same layout as the first time
     await page.locator('.camera-modal-close').click();
     await openCameraReady(page);
     expect(await rect('.camera-video-container')).toEqual(firstOpen);
