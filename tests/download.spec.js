@@ -343,7 +343,7 @@ test.describe('Photos in the Paprika download', () => {
     expect(file).toEqual(recipe);
   });
 
-  test('one photo: a square thumbnail as the main photo, and no gallery', async ({ page }) => {
+  test('one photo: a square thumbnail as the main photo, the photo in the gallery, and photo_large', async ({ page }) => {
     const photo = await makePhoto(page, 1200, 1600);
     await setUpRecipe(page, [photo]);
     const file = await downloadFile(page);
@@ -352,8 +352,12 @@ test.describe('Photos in the Paprika download', () => {
     expect(file.photo_data.startsWith('/9j/')).toBe(true); // JPEG
     expect(await imageSize(page, file.photo_data)).toEqual([280, 280]);
     expect(file.photo_hash).toBe(sha256(file.photo_data));
-    expect(file.photos).toBeUndefined();
-    expect(file.photo_large).toBeUndefined();
+
+    // The full photo, so tapping the thumbnail in Paprika opens it
+    expect(file.photos).toHaveLength(1);
+    expect(file.photos[0].name).toBe('1');
+    expect(file.photos[0].data).toBe(photo.split(',')[1]);
+    expect(file.photo_large).toBe(file.photos[0].filename);
   });
 
   test('the thumbnail is the centre of the photo, not the whole photo squashed', async ({ page }) => {
@@ -390,8 +394,8 @@ test.describe('Photos in the Paprika download', () => {
     const filenames = file.photos.map(p => p.filename).concat(file.photo);
     expect(new Set(filenames).size).toBe(4);
     filenames.forEach(f => expect(f).toMatch(/^[0-9A-F-]{36}\.jpg$/));
-    // photo_large made Paprika drop gallery photos in import tests
-    expect(file.photo_large).toBeUndefined();
+    // Tapping the thumbnail in Paprika opens the first photo
+    expect(file.photo_large).toBe(file.photos[0].filename);
   });
 
   test('photos never appear in the editor or in the copied text', async ({ page }) => {

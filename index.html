@@ -2073,8 +2073,9 @@ Rules:
          * Adds the photos to a recipe in the layout Paprika imports (tested by
          * importing sample files into Paprika):
          * - main photo: a square thumbnail of the first photo (photo, photo_data, photo_hash)
-         * - with 2+ photos, every photo also goes in the gallery (photos)
-         * There is no photo_large: Paprika's own exports have it, but it isn't needed.
+         * - every photo goes in the gallery (photos)
+         * - photo_large points at the first gallery photo, so tapping the
+         *   thumbnail in Paprika opens the full-size photo
          */
         async function addPhotosForPaprika(recipe, photos) {
             const result = { ...recipe };
@@ -2088,13 +2089,12 @@ Rules:
             result.photo_data = thumbnail;
             result.photo_hash = await sha256OfBase64(thumbnail);
 
-            if (photos.length > 1) {
-                result.photos = photos.map((photo, index) => ({
-                    name: String(index + 1),
-                    filename: newPhotoFilename(),
-                    data: base64FromDataUrl(photo)
-                }));
-            }
+            result.photos = photos.map((photo, index) => ({
+                name: String(index + 1),
+                filename: newPhotoFilename(),
+                data: base64FromDataUrl(photo)
+            }));
+            result.photo_large = result.photos[0].filename;
             return result;
         }
 
