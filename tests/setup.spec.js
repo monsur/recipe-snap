@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { expandStep } = require('./helpers');
 
 test.describe('Step 1: Setup - API Key Management', () => {
   test.beforeEach(async ({ page }) => {
@@ -357,5 +358,36 @@ test.describe('Settings defaults', () => {
     const seen = await captureGeminiRequest(page);
     await extract(page);
     expect(seen.model).toBe(await page.evaluate(() => CONFIG.defaults.model));
+  });
+});
+
+test.describe('Phone layout', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 393, height: 852 });
+    await page.goto('/');
+  });
+
+  test('text fields use at least 16px text, so iOS Safari does not zoom in on tap', async ({ page }) => {
+    const sizes = await page.evaluate(() =>
+      [...document.querySelectorAll('input[type="text"], input[type="password"], textarea')]
+        .map(el => ({ id: el.id, size: parseFloat(getComputedStyle(el).fontSize) })));
+    expect(sizes.length).toBeGreaterThan(0);
+    for (const { id, size } of sizes) {
+      expect(size, `#${id}`).toBeGreaterThanOrEqual(16);
+    }
+  });
+
+  test('Take Photo and Upload Photos sit side by side', async ({ page }) => {
+    await expandStep(page, 'step2');
+    const take = await page.locator('#takePhotoBtn').boundingBox();
+    const upload = await page.locator('#uploadBtn').boundingBox();
+    expect(Math.round(take.y)).toBe(Math.round(upload.y));
+    expect(take.x + take.width).toBeLessThanOrEqual(upload.x);
+    expect(upload.x + upload.width).toBeLessThanOrEqual(393);
+  });
+
+  test('the page is no wider than the screen', async ({ page }) => {
+    await expandStep(page, 'step2');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(393);
   });
 });
