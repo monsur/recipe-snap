@@ -1,200 +1,116 @@
 # Recipe Snap - Testing Guide
 
-This project uses [Playwright](https://playwright.dev/) for end-to-end testing to ensure changes are safe as they're being made.
+Recipe Snap uses [Playwright](https://playwright.dev/) for end-to-end tests. Every test runs in Chromium, Firefox and WebKit (Safari's engine): 164 tests per browser, 492 in total. All of them should pass.
 
 ## Test Structure
 
 ```
 tests/
-├── setup.spec.js       - Step 1: API key management and settings
-├── upload.spec.js      - Step 2: Image upload and processing
-├── extraction.spec.js  - Step 2: Gemini API integration
-├── download.spec.js    - Step 3: Recipe export and download
-└── integration.spec.js - End-to-end workflows
+├── setup.spec.js        - Step 1: API key, settings and defaults, Clear all data, phone layout   (25)
+├── upload.spec.js       - Step 2: file upload, file types, HEIC conversion, image sizing         (24)
+├── camera.spec.js       - Step 2: camera open/close, capture, switching, Done button, layout     (32)
+├── extraction.spec.js   - Step 2: Gemini requests, retries, timeouts, error messages             (35)
+├── download.spec.js     - Step 3: editor, Copy, gzip output, photos in the Paprika file          (24)
+├── integration.spec.js  - End-to-end workflows, reset, Clear all data                            (24)
+├── helpers.js           - Shared helpers (see below)
+└── fixtures/            - Small and large PNG images used by upload tests, and the scripts that made them
 ```
+
+Counts are per browser.
 
 ## Running Tests
 
-### Run all tests (headless)
 ```bash
-npm test
+npm test                 # all tests, all browsers (about 1.5 minutes)
+npm run test:ui          # interactive UI mode, recommended during development
+npm run test:headed      # watch the browser
+npm run test:debug       # step through with the Playwright Inspector
+npm run test:chromium    # one browser (also test:firefox, test:webkit)
+npm run test:report      # open the last HTML report
 ```
 
-### Run tests with UI mode (recommended for development)
+Run one file, or tests whose name matches:
+
 ```bash
-npm run test:ui
+npx playwright test tests/camera.spec.js
+npx playwright test -g "Done is hidden"
 ```
 
-### Run tests in headed mode (see browser)
+Playwright starts the app automatically with `http-server` on port 8080.
+
+### Reading the results
+
+Failed and flaky tests are listed **above** the final summary line. The last line alone can read "N passed" even when some tests failed, so check for a "failed" or "flaky" count, or compare the passed count with the total:
+
 ```bash
-npm run test:headed
+npx playwright test --list | tail -1    # total number of tests
 ```
 
-### Debug tests
-```bash
-npm run test:debug
-```
+## Stand-ins for External Things
 
-### Run tests in specific browser
-```bash
-npm run test:chromium
-npm run test:firefox
-npm run test:webkit
-```
+The tests need no API key, camera or network. Everything external is replaced:
 
-### View last test report
-```bash
-npm run test:report
-```
+| Real thing | Stand-in |
+|------------|----------|
+| Gemini API | `page.route('**/generativelanguage.googleapis.com/**', ...)` returns a canned response, error status, or slow reply |
+| Camera | `MediaDevices.prototype.getUserMedia` is replaced (via `addInitScript`, before the page loads) with a stream from an animated canvas. Patching the prototype, not `navigator.mediaDevices`, is needed for WebKit. |
+| HEIC converter (heic-to, loaded from a CDN) | Requests to `heic-to` are answered with a small script that defines a fake `HeicTo` |
+| Clipboard | `stubClipboard()` replaces `navigator.clipboard`; only Chromium lets Playwright grant real clipboard access |
 
-## Test-Driven Development Workflow
+Example Gemini stand-in:
 
-The tests are written following TDD principles. Many tests will **initially fail** because the functionality hasn't been implemented yet. This is expected and intentional.
-
-### Workflow:
-1. **Red** - Run tests, see them fail
-2. **Green** - Implement the minimum code to make tests pass
-3. **Refactor** - Improve the code while keeping tests green
-
-### Example:
-```bash
-# Run tests to see what's failing
-npm run test:ui
-
-# Implement feature in recipe-snap.html
-# ...
-
-# Re-run tests to verify implementation
-npm test
-```
-
-## What's Being Tested
-
-### Setup Tests ([setup.spec.js](tests/setup.spec.js))
-- API key storage in localStorage
-- API key persistence across page loads
-- Advanced options (custom model, custom prompt)
-- Clear data functionality
-- Step expand/collapse behavior
-
-### Upload Tests ([upload.spec.js](tests/upload.spec.js))
-- File upload button visibility
-- Image preview display
-- HEIC file conversion
-- Image resizing to 1600px max
-- Base64 conversion
-- Multiple image handling
-
-### Extraction Tests ([extraction.spec.js](tests/extraction.spec.js))
-- Gemini API integration
-- API request/response handling
-- Error handling (invalid API key, rate limits)
-- Loading states
-- Custom model/prompt usage
-- Multiple image processing
-
-### Download Tests ([download.spec.js](tests/download.spec.js))
-- Recipe JSON display in editor
-- JSON editing
-- .paprikarecipe file download
-- Copy to clipboard
-- Filename sanitization
-- JSON validation
-
-### Integration Tests ([integration.spec.js](tests/integration.spec.js))
-- Complete workflow: setup → upload → extract → download
-- Settings persistence
-- Multi-image recipes
-- Error handling scenarios
-- Special characters in recipes
-- Clear data workflow
-
-## Mocking External APIs
-
-The tests mock the Gemini API to avoid:
-- Making real API calls during testing
-- Incurring API costs
-- Depending on external service availability
-- Rate limiting issues
-
-Example mock in tests:
 ```javascript
-await page.route('**/generativelanguage.googleapis.com/**', async route => {
-  await route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({
-      candidates: [{
-        content: {
-          parts: [{ text: JSON.stringify(mockRecipe) }]
-        }
-      }]
-    })
-  });
-});
+await page.route('**/generativelanguage.googleapis.com/**', route => route.fulfill({
+  status: 200,
+  contentType: 'application/json',
+  body: JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(mockRecipe) }] } }] })
+}));
 ```
+
+## Helpers (`tests/helpers.js`)
+
+| Helper | Use |
+|--------|-----|
+| `expandStep(page, 'step2')` | Opens a collapsed step so its buttons can be clicked |
+| `stubClipboard(page)` / `readStubClipboard(page)` | Fake clipboard, and read what the app wrote to it |
+| `collectDialogs(page)` | Accepts every alert/confirm and returns their messages |
+| `fastRetries(page)` | Shrinks retry delays so retry tests run quickly |
+| `clickClearAllData(page)` | Clicks **Clear all data** reliably (see Known Issues) |
 
 ## Writing New Tests
 
-When adding new features:
+1. Add the test to the spec file for that part of the app.
+2. Check it **fails without your change** and passes with it. A quick way, while the change is uncommitted:
+   ```bash
+   cp index.html /tmp/index.new && git show HEAD:index.html > index.html
+   npx playwright test -g "your test name"     # should fail
+   cp /tmp/index.new index.html                # restore your change
+   ```
+3. Run the full suite and check there are no failed or flaky tests.
 
-1. Write tests first (in appropriate spec file)
-2. Run tests to see them fail
-3. Implement the feature
-4. Run tests to verify they pass
+Guidelines:
+- Assert the behaviour itself, e.g. "the alert says X" or "the file contains Y". A check like `expect(typeof x).toBe('boolean')` can never fail and tests nothing.
+- Prefer `expect(...)` and `expect.poll(...)`, which wait, over fixed `waitForTimeout` delays.
+- When measuring layout, wait for animations (steps and Advanced Options expand with a CSS transition) to finish first.
+- Install init scripts (`addInitScript`) before `page.goto`.
 
-Test naming convention:
-```javascript
-test('should [expected behavior]', async ({ page }) => {
-  // Arrange - set up test conditions
-  // Act - perform the action
-  // Assert - verify the result
-});
-```
+## Known Issues
 
-## Continuous Integration
+- **Firefox and the "Clear all data" link:** under test automation Firefox sometimes receives the mouse press on this link but never fires the click (about 1 run in 20). `clickClearAllData()` sends the click event directly instead. It isn't a bug in the app.
 
-The test configuration is CI-ready:
-- Uses `http-server` to serve the app locally
-- Retries failed tests in CI environment
-- Generates HTML reports
-- Takes screenshots on failure
-- Records traces for debugging
+## What the Tests Don't Cover
+
+These need a manual check on a real device after related changes:
+
+- **iPhone Safari:** the real camera, permission prompts, the bottom toolbar overlapping the page, and zooming into text fields. The tests use an iPhone-sized window, not Safari itself.
+- **Real Gemini responses:** whether the model follows the prompt (numbered steps, nothing invented). Try a few real recipes.
+- **Paprika import:** whether downloaded files import correctly, with the thumbnail and gallery. Import a real download into Paprika.
+- **The real HEIC converter:** upload an actual HEIC photo.
 
 ## Debugging Failed Tests
 
-1. Use UI mode for interactive debugging:
-   ```bash
-   npm run test:ui
-   ```
-
-2. Use debug mode to step through tests:
-   ```bash
-   npm run test:debug
-   ```
-
-3. Check screenshots in `test-results/` folder
-
-4. View trace files in the test report:
-   ```bash
-   npm run test:report
-   ```
-
-## Coverage
-
-These tests cover:
-- ✅ User interface interactions
-- ✅ localStorage persistence
-- ✅ API integration (mocked)
-- ✅ File upload/download
-- ✅ Image processing
-- ✅ Error scenarios
-- ✅ Edge cases (special characters, multiple images)
-
-## Next Steps
-
-As you implement features in [recipe-snap.html](recipe-snap.html):
-1. Run the relevant test suite
-2. Watch tests turn from red to green
-3. Ensure all tests pass before committing changes
-4. Add new tests for any additional functionality
+1. `npm run test:ui` to run and watch tests interactively.
+2. `npm run test:debug` to step through a test.
+3. Screenshots and page snapshots of failures are in `test-results/`.
+4. `npm run test:report` shows the HTML report with traces.
+5. Use `--repeat-each=20` on a single test to check whether a failure is flaky.
